@@ -1057,10 +1057,25 @@ function MainApp({ session: initialSession, onLogout }) {
       prix: c.price,
       service_id: c.service_id||null,
     }));
-    // Créer la commande dans la table orders
+    // 1) Générer le numéro de commande à emporter (atomique, partagé avec l'app restaurant)
+    let emNum = null;
+    try { const n = await sb.rpc("next_em_num", { p_restaurant_id: rid }); emNum = Array.isArray(n)?n[0]:n; } catch(e){}
+    // 2) Créer la table virtuelle "à emporter" (orders.table_id est NOT NULL)
+    const tableBody = {
+      id: uid(),
+      restaurant_id: rid,
+      is_takeaway: true,
+      statut: "occupee",
+      em_num: emNum,
+      client_nom: nomComplet,
+    };
+    const tableRows = await sb.post("tables", tableBody);
+    const tableId = tableRows?.[0]?.id || tableBody.id;
+    // 3) Créer la commande dans la table orders
     const orderBody = {
       id: uid(),
       restaurant_id: rid,
+      table_id: tableId,
       is_takeaway: true,
       statut: "en_attente",
       total: total,
