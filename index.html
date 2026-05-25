@@ -825,8 +825,8 @@ function OrderTracker({ orderId, onClose }) {
               <div style={{fontSize:12,fontWeight:700,color:"#5A6170",textTransform:"uppercase",letterSpacing:".5px",marginBottom:10}}>Articles commandés</div>
               {order.items.map((item,i)=>(
                 <div key={i} style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid rgba(255,255,255,.05)"}}>
-                  <span style={{fontSize:13,color:"#9CA3B0"}}>{item.qty}× {item.nom}</span>
-                  <span style={{fontSize:13,fontWeight:700,color:"#F0F2F8"}}>{fmt((item.prix||0)*item.qty)}</span>
+                  <span style={{fontSize:13,color:"#9CA3B0"}}>{item.quantite}× {item.nom}</span>
+                  <span style={{fontSize:13,fontWeight:700,color:"#F0F2F8"}}>{fmt((item.prix||0)*item.quantite)}</span>
                 </div>
               ))}
             </div>
@@ -1049,12 +1049,11 @@ function MainApp({ session: initialSession, onLogout }) {
   const handleOrder = async ({ cart, mode, total }) => {
     const client = session.client;
     const nomComplet = `${client.prenom||""} ${client.nom||""}`.trim();
-    // Articles de la commande (stockés en jsonb dans orders.items)
+    // Articles de la commande (stockés en jsonb dans orders.items) — format écosystème : nom/prix/quantite
     const items = cart.map(c=>({
-      id: uid(),
       nom: c.name,
-      qty: c.qty,
       prix: c.price,
+      quantite: c.qty,
       service_id: c.service_id||null,
     }));
     // 1) Générer le numéro de commande à emporter (atomique, partagé avec l'app restaurant)
