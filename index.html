@@ -310,18 +310,48 @@ function OfflineBanner() {
 // ═══════════════════════════════════════════════════════════════════
 // SPLASH SCREEN
 // ═══════════════════════════════════════════════════════════════════
+function NxsLogo({ size=90, mb=22 }) {
+  const s = size;
+  const r = Math.round(s * 0.267);
+  return (
+    <svg width={s} height={s} viewBox="0 0 90 90" fill="none" xmlns="http://www.w3.org/2000/svg"
+      style={{display:"block",margin:`0 auto ${mb}px`,filter:"drop-shadow(0 8px 24px rgba(245,166,35,.5))"}}>
+      <defs>
+        <linearGradient id="nxslg" x1="0" y1="0" x2="90" y2="90" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#F5A623"/><stop offset="1" stopColor="#C8780F"/>
+        </linearGradient>
+      </defs>
+      <rect width="90" height="90" rx={r} fill="url(#nxslg)"/>
+      {/* Assiette extérieure */}
+      <ellipse cx="45" cy="48" rx="20" ry="20" fill="none" stroke="white" strokeWidth="2.8" strokeOpacity="0.95"/>
+      {/* Assiette intérieure */}
+      <ellipse cx="45" cy="48" rx="13" ry="13" fill="none" stroke="white" strokeWidth="1.8" strokeOpacity="0.7"/>
+      {/* Fourchette - tige */}
+      <line x1="27" y1="62" x2="27" y2="44" stroke="white" strokeWidth="2.4" strokeLinecap="round"/>
+      {/* Fourchette - dents */}
+      <line x1="24" y1="30" x2="24" y2="38" stroke="white" strokeWidth="1.8" strokeLinecap="round"/>
+      <line x1="27" y1="30" x2="27" y2="44" stroke="white" strokeWidth="1.8" strokeLinecap="round"/>
+      <line x1="30" y1="30" x2="30" y2="38" stroke="white" strokeWidth="1.8" strokeLinecap="round"/>
+      {/* Couteau - tige */}
+      <line x1="63" y1="30" x2="63" y2="62" stroke="white" strokeWidth="2.4" strokeLinecap="round"/>
+      {/* Couteau - lame */}
+      <path d="M63 30 Q70 37 63 44" fill="rgba(255,255,255,0.9)" stroke="white" strokeWidth="0.5"/>
+    </svg>
+  );
+}
+
 function SplashScreen({ onDone }) {
-  useEffect(() => { const t = setTimeout(onDone, 1800); return ()=>clearTimeout(t); }, []);
+  useEffect(() => { const t = setTimeout(onDone, 2000); return ()=>clearTimeout(t); }, []);
   return (
     <div style={{position:"fixed",inset:0,background:"#080A0F",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",zIndex:9999}}>
-      <div style={{animation:"bounceIn .6s ease",textAlign:"center"}}>
-        <div style={{width:90,height:90,borderRadius:28,background:"linear-gradient(135deg,#F5A623,#D4891A)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:44,boxShadow:"0 8px 40px rgba(245,166,35,.4)",marginBottom:22,marginLeft:"auto",marginRight:"auto"}}>🍽</div>
-        <h1 style={{fontFamily:"Outfit,sans-serif",fontSize:32,fontWeight:900,color:"#F5A623",letterSpacing:"-0.5px"}}>NexaServe</h1>
-        <p style={{fontSize:12,color:"#5A6170",letterSpacing:"3px",textTransform:"uppercase",marginTop:6}}>Client</p>
+      <div style={{animation:"bounceIn .7s cubic-bezier(.34,1.56,.64,1)",textAlign:"center"}}>
+        <NxsLogo size={100} mb={24}/>
+        <h1 style={{fontFamily:"Outfit,sans-serif",fontSize:36,fontWeight:900,color:"#F5A623",letterSpacing:"-0.5px",margin:0}}>NexaServe</h1>
+        <p style={{fontSize:11,color:"#5A6170",letterSpacing:"4px",textTransform:"uppercase",marginTop:8}}>Client</p>
       </div>
-      <div style={{position:"absolute",bottom:48,display:"flex",flexDirection:"column",alignItems:"center",gap:10}}>
-        <Spinner size={24} color="#F5A623"/>
-        <span style={{fontSize:11,color:"#5A6170"}}>Chargement...</span>
+      <div style={{position:"absolute",bottom:52,display:"flex",flexDirection:"column",alignItems:"center",gap:10}}>
+        <Spinner size={22} color="#F5A623"/>
+        <span style={{fontSize:11,color:"#5A6170",letterSpacing:"0.5px"}}>Chargement...</span>
       </div>
     </div>
   );
@@ -544,6 +574,7 @@ function AuthPage({ onAuth }) {
 
         {/* Logo */}
         <div className="nxs-logo">
+          <NxsLogo size={80} mb={14}/>
           <h1>NexaServe</h1>
           <p>Client</p>
         </div>
@@ -745,17 +776,20 @@ function MenuScreen({ session, cart, onCartChange, onOpenCart }) {
     const r = session.restaurants?.find(r=>r.id===rid);
     setResto(r);
     // Colonnes réelles : nom, prix, categorie, desactive, image, service_id
-    sb.get("menu_items", `restaurant_id=eq.${encodeURIComponent(rid)}&desactive=eq.false&order=categorie.asc,nom.asc`)
+    // Exclure explicitement le poste Chicha — seuls Cuisine et Bar sont visibles
+    sb.get("menu_items", `restaurant_id=eq.${encodeURIComponent(rid)}&desactive=eq.false&poste=neq.Chicha&order=categorie.asc,nom.asc`)
       .then(items => {
-        const normalized = (items||[]).map(p=>({
-          id:         p.id,
-          name:       p.nom,
-          price:      p.prix,
-          category:   p.categorie,
-          image_url:  p.image,
-          service_id: p.service_id,
-          poste:      p.poste,
-        }));
+        const normalized = (items||[])
+          .filter(p => !p.poste || p.poste.toLowerCase() !== "chicha")
+          .map(p=>({
+            id:         p.id,
+            name:       p.nom,
+            price:      p.prix,
+            category:   p.categorie,
+            image_url:  p.image,
+            service_id: p.service_id,
+            poste:      p.poste,
+          }));
         setMenu(normalized);
         const cats = [...new Set(normalized.map(i=>i.category).filter(Boolean))];
         setCats(cats);
