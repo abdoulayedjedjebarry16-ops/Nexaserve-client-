@@ -744,27 +744,24 @@ function MenuScreen({ session, cart, onCartChange, onOpenCart }) {
     setLoading(true);
     const r = session.restaurants?.find(r=>r.id===rid);
     setResto(r);
-    // Charger le menu (table menu_items ou products selon l'existant)
-    sb.get("menu_items", `restaurant_id=eq.${encodeURIComponent(rid)}&available=eq.true&order=category.asc,name.asc`)
+    // Colonnes réelles : nom, prix, categorie, desactive, image, service_id
+    sb.get("menu_items", `restaurant_id=eq.${encodeURIComponent(rid)}&desactive=eq.false&order=categorie.asc,nom.asc`)
       .then(items => {
-        setMenu(items||[]);
-        const cats = [...new Set((items||[]).map(i=>i.category).filter(Boolean))];
+        const normalized = (items||[]).map(p=>({
+          id:         p.id,
+          name:       p.nom,
+          price:      p.prix,
+          category:   p.categorie,
+          image_url:  p.image,
+          service_id: p.service_id,
+          poste:      p.poste,
+        }));
+        setMenu(normalized);
+        const cats = [...new Set(normalized.map(i=>i.category).filter(Boolean))];
         setCats(cats);
         setLoading(false);
       })
-      .catch(() => {
-        // Fallback sur table 'products'
-        sb.get("products", `restaurant_id=eq.${encodeURIComponent(rid)}&actif=eq.true&order=categorie.asc,nom.asc`)
-          .then(items => {
-            // Normaliser
-            const normalized = (items||[]).map(p=>({id:p.id,name:p.nom,description:p.description,price:p.prix,category:p.categorie,image_url:p.image_url,service_id:p.service_id,available:p.actif}));
-            setMenu(normalized);
-            const cats = [...new Set(normalized.map(i=>i.category).filter(Boolean))];
-            setCats(cats);
-            setLoading(false);
-          })
-          .catch(()=>setLoading(false));
-      });
+      .catch(()=>setLoading(false));
   }, [rid]);
 
   const filtered = useMemo(() => menu.filter(item => {
@@ -1156,9 +1153,105 @@ function NotificationsScreen({ session }) {
 function ProfilScreen({ session, onLogout, onSessionUpdate }) {
   const { client, restaurants, affiliations } = session;
   const [showAffiliate, setShowAffiliate] = useState(false);
-  const [toast, setToast] = useState(null);
+  const [toast, setToast]   = useState(null);
+  const [sheet, setSheet]   = useState(null); // null | "edit" | "password" | "delete"
+
+  // Photo de profil (stockée localement uniquement)
+  const PHOTO_KEY = `nxsc_photo_${client.id}`;
+  const [photo, setPhoto] = useState(() => { try { return localStorage.getItem(PHOTO_KEY)||null; } catch(e){return null;} });
+
+  // ── Modifier infos
+  const [ePrenom, setEPrenom] = useState(client.prenom||"");
+  const [eNom,    setENom]    = useState(client.nom||"");
+  const [eTel,    setETel]    = useState(client.telephone||"");
+  const [eLoading,setELoading]= useState(false);
+  const [eMsg,    setEMsg]    = useState({type:"",text:""});
+
+  // ── Changer mot de passe
+  const [pOld,  setPOld]  = useState("");
+  const [pNew,  setPNew]  = useState("");
+  const [pNew2, setPNew2] = useState("");
+  const [pLoading,setPLoading] = useState(false);
+  const [pMsg,  setPMsg]  = useState({type:"",text:""});
+
+  // ── Supprimer compte
+  const [dPass,   setDPass]   = useState("");
+  const [dLoading,setDLoading]= useState(false);
+  const [dMsg,    setDMsg]    = useState({type:"",text:""});
 
   const nomComplet = `${client.prenom||""} ${client.nom||""}`.trim();
+
+  const MsgBox = ({msg}) => msg.text ? (
+    <div style={{background:msg.type==="error"?"rgba(239,68,68,.1)":"rgba(34,197,94,.1)",
+      border:`1px solid ${msg.type==="error"?"rgba(239,68,68,.3)":"rgba(34,197,94,.3)"}`,
+      borderRadius:10,padding:"10px 14px",marginBottom:14,
+      color:msg.type==="error"?"#EF4444":"#22C55E",fontSize:13,fontWeight:500}}>
+      {msg.type==="error"?"⚠️ ":"✓ "}{msg.text}
+    </div>
+  ) : null;
+
+  // ── Photo de profil
+  const handlePhoto = (e) => {
+    const file = e.target.files?.[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const data = ev.target.result;
+      localStorage.setItem(PHOTO_KEY, data);
+      setPhoto(data);
+      setToast("Photo de profil mise à jour !");
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // ── Modifier infos
+  const doEditInfo = async () => {
+    if(!ePrenom||!eNom||!eTel){ setEMsg({type:"error",text:"Tous les champs sont obligatoires."}); return; }
+    setELoading(true); setEMsg({type:"",text:""});
+    try {
+      await sb.patch("clients", `id=eq.${client.id}`, {prenom:ePrenom.trim(),nom:eNom.trim(),telephone:eTel.trim()});
+      const newClient = {...client,prenom:ePrenom.trim(),nom:eNom.trim(),telephone:eTel.trim()};
+      const newSession = {...session,client:newClient};
+      setSession(newSession);
+      onSessionUpdate(newSession);
+      setEMsg({type:"success",text:"Informations mises à jour !"});
+      setTimeout(()=>setSheet(null),1500);
+    } catch(e){ setEMsg({type:"error",text:"Erreur : "+e.message}); }
+    setELoading(false);
+  };
+
+  // ── Changer mot de passe
+  const doChangePass = async () => {
+    if(!pOld||!pNew||!pNew2){ setPMsg({type:"error",text:"Tous les champs sont obligatoires."}); return; }
+    if(pNew!==pNew2){ setPMsg({type:"error",text:"Les nouveaux mots de passe ne correspondent pas."}); return; }
+    if(pNew.length<4){ setPMsg({type:"error",text:"Mot de passe trop court (min. 4 caractères)."}); return; }
+    setPLoading(true); setPMsg({type:"",text:""});
+    try {
+      const rows = await sb.get("clients",`id=eq.${client.id}&password_hash=eq.${encodeURIComponent(pOld)}&select=id`);
+      if(!rows?.length){ setPMsg({type:"error",text:"Mot de passe actuel incorrect."}); setPLoading(false); return; }
+      await sb.patch("clients",`id=eq.${client.id}`,{password_hash:pNew});
+      setPMsg({type:"success",text:"Mot de passe modifié avec succès !"});
+      setTimeout(()=>{ setSheet(null); setPOld(""); setPNew(""); setPNew2(""); },1500);
+    } catch(e){ setPMsg({type:"error",text:"Erreur : "+e.message}); }
+    setPLoading(false);
+  };
+
+  // ── Supprimer compte
+  const doDelete = async () => {
+    if(!dPass){ setDMsg({type:"error",text:"Mot de passe requis pour confirmer."}); return; }
+    setDLoading(true); setDMsg({type:"",text:""});
+    try {
+      const rows = await sb.get("clients",`id=eq.${client.id}&password_hash=eq.${encodeURIComponent(dPass)}&select=id`);
+      if(!rows?.length){ setDMsg({type:"error",text:"Mot de passe incorrect."}); setDLoading(false); return; }
+      // Désactiver affiliations
+      await sb.patch("client_affiliations",`client_id=eq.${client.id}`,{actif:false});
+      // Supprimer les données locales
+      localStorage.removeItem(PHOTO_KEY);
+      clearSession();
+      onLogout();
+    } catch(e){ setDMsg({type:"error",text:"Erreur : "+e.message}); }
+    setDLoading(false);
+  };
 
   const handleNewAffi = (resto) => {
     const newSession = {
@@ -1172,17 +1265,42 @@ function ProfilScreen({ session, onLogout, onSessionUpdate }) {
     setToast("Affilié à "+resto.nom+" !");
   };
 
+  const inputRef = useRef();
+
   return (
     <div style={{padding:"20px 16px",paddingBottom:100}}>
       <h2 style={{fontFamily:"Outfit,sans-serif",fontSize:22,fontWeight:800,marginBottom:20,color:"#F0F2F8"}}>Mon profil</h2>
 
       {/* Avatar + Infos */}
       <div style={{background:"linear-gradient(135deg,rgba(245,166,35,.15),rgba(245,166,35,.05))",border:"1px solid rgba(245,166,35,.2)",borderRadius:20,padding:"22px",marginBottom:20,textAlign:"center"}}>
-        <div style={{width:72,height:72,borderRadius:22,background:"linear-gradient(135deg,#F5A623,#D4891A)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:32,margin:"0 auto 14px",boxShadow:"0 4px 20px rgba(245,166,35,.3)"}}>
-          {(client.prenom||"U").charAt(0).toUpperCase()}
+        {/* Photo cliquable */}
+        <div style={{position:"relative",width:80,height:80,margin:"0 auto 14px",cursor:"pointer"}} onClick={()=>inputRef.current?.click()}>
+          {photo
+            ? <img src={photo} alt="profil" style={{width:80,height:80,borderRadius:24,objectFit:"cover",border:"3px solid #F5A623"}}/>
+            : <div style={{width:80,height:80,borderRadius:24,background:"linear-gradient(135deg,#F5A623,#D4891A)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:34,boxShadow:"0 4px 20px rgba(245,166,35,.3)"}}>
+                {(client.prenom||"U").charAt(0).toUpperCase()}
+              </div>
+          }
+          <div style={{position:"absolute",bottom:-4,right:-4,width:26,height:26,borderRadius:"50%",background:"#F5A623",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,border:"2px solid #080A0F"}}>📷</div>
         </div>
+        <input ref={inputRef} type="file" accept="image/*" style={{display:"none"}} onChange={handlePhoto}/>
         <div style={{fontFamily:"Outfit,sans-serif",fontWeight:800,fontSize:20,color:"#F0F2F8"}}>{nomComplet}</div>
         <div style={{fontSize:13,color:"#9CA3B0",marginTop:5}}>📞 {client.telephone}</div>
+        <div style={{fontSize:11,color:"#5A6170",marginTop:4}}>Appuyez sur la photo pour la modifier</div>
+      </div>
+
+      {/* Actions profil */}
+      <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:20}}>
+        <button onClick={()=>setSheet("edit")} className="c-card" style={{display:"flex",alignItems:"center",gap:14,cursor:"pointer",border:"1px solid rgba(255,255,255,.07)",textAlign:"left",width:"100%",background:"#0F1118"}}>
+          <span style={{fontSize:22}}>✏️</span>
+          <div style={{flex:1}}><div style={{fontWeight:700,color:"#F0F2F8",fontSize:14}}>Modifier mes informations</div><div style={{fontSize:12,color:"#5A6170",marginTop:2}}>Nom, prénom, téléphone</div></div>
+          <span style={{color:"#5A6170",fontSize:16}}>›</span>
+        </button>
+        <button onClick={()=>setSheet("password")} className="c-card" style={{display:"flex",alignItems:"center",gap:14,cursor:"pointer",border:"1px solid rgba(255,255,255,.07)",textAlign:"left",width:"100%",background:"#0F1118"}}>
+          <span style={{fontSize:22}}>🔑</span>
+          <div style={{flex:1}}><div style={{fontWeight:700,color:"#F0F2F8",fontSize:14}}>Changer le mot de passe</div><div style={{fontSize:12,color:"#5A6170",marginTop:2}}>Sécurisez votre compte</div></div>
+          <span style={{color:"#5A6170",fontSize:16}}>›</span>
+        </button>
       </div>
 
       {/* Mes restaurants */}
@@ -1206,9 +1324,57 @@ function ProfilScreen({ session, onLogout, onSessionUpdate }) {
       </div>
 
       {/* Déconnexion */}
-      <button className="c-btn c-btn-danger" onClick={onLogout} style={{width:"100%",padding:"14px",borderRadius:14,fontWeight:700,fontSize:14,cursor:"pointer",fontFamily:"Outfit,sans-serif"}}>
+      <button className="c-btn c-btn-danger" onClick={onLogout} style={{width:"100%",padding:"14px",borderRadius:14,fontWeight:700,fontSize:14,cursor:"pointer",fontFamily:"Outfit,sans-serif",marginBottom:14}}>
         🚪 Se déconnecter
       </button>
+
+      {/* Zone danger */}
+      <div style={{border:"1px solid rgba(239,68,68,.25)",borderRadius:16,padding:"16px",background:"rgba(239,68,68,.04)"}}>
+        <div style={{fontWeight:700,color:"#EF4444",fontSize:13,marginBottom:6}}>⚠️ Zone de danger</div>
+        <div style={{fontSize:12,color:"#9CA3B0",marginBottom:12,lineHeight:1.5}}>La suppression de votre compte est irréversible. Toutes vos données seront perdues.</div>
+        <button onClick={()=>setSheet("delete")} style={{width:"100%",padding:"12px",borderRadius:12,background:"rgba(239,68,68,.12)",border:"1px solid rgba(239,68,68,.3)",color:"#EF4444",fontWeight:700,fontSize:13,cursor:"pointer"}}>
+          🗑 Supprimer mon compte
+        </button>
+      </div>
+
+      {/* ── Sheet : Modifier infos */}
+      {sheet==="edit" && (
+        <Sheet title="Modifier mes informations" onClose={()=>setSheet(null)}>
+          <MsgBox msg={eMsg}/>
+          <Field label="Prénom"><input className="c-inp" value={ePrenom} onChange={e=>setEPrenom(e.target.value)} placeholder="Prénom"/></Field>
+          <Field label="Nom"><input className="c-inp" value={eNom} onChange={e=>setENom(e.target.value)} placeholder="Nom"/></Field>
+          <Field label="Téléphone"><input className="c-inp" value={eTel} onChange={e=>setETel(e.target.value)} placeholder="6XX XX XX XX" type="tel"/></Field>
+          <button className="c-btn" onClick={doEditInfo} disabled={eLoading} style={{marginBottom:10}}>{eLoading?"Enregistrement...":"Enregistrer"}</button>
+          <button className="c-btn c-btn-ghost" onClick={()=>setSheet(null)}>Annuler</button>
+        </Sheet>
+      )}
+
+      {/* ── Sheet : Changer mot de passe */}
+      {sheet==="password" && (
+        <Sheet title="Changer le mot de passe" onClose={()=>setSheet(null)}>
+          <MsgBox msg={pMsg}/>
+          <Field label="Mot de passe actuel"><input className="c-inp" type="password" value={pOld} onChange={e=>setPOld(e.target.value)} placeholder="••••••••"/></Field>
+          <Field label="Nouveau mot de passe"><input className="c-inp" type="password" value={pNew} onChange={e=>setPNew(e.target.value)} placeholder="••••••••"/></Field>
+          <Field label="Confirmer le nouveau mot de passe"><input className="c-inp" type="password" value={pNew2} onChange={e=>setPNew2(e.target.value)} placeholder="••••••••"/></Field>
+          <button className="c-btn" onClick={doChangePass} disabled={pLoading} style={{marginBottom:10}}>{pLoading?"Modification...":"Modifier le mot de passe"}</button>
+          <button className="c-btn c-btn-ghost" onClick={()=>setSheet(null)}>Annuler</button>
+        </Sheet>
+      )}
+
+      {/* ── Sheet : Supprimer compte */}
+      {sheet==="delete" && (
+        <Sheet title="Supprimer mon compte" onClose={()=>setSheet(null)}>
+          <div style={{background:"rgba(239,68,68,.08)",border:"1px solid rgba(239,68,68,.25)",borderRadius:12,padding:"12px 14px",marginBottom:16,fontSize:13,color:"#EF4444",lineHeight:1.5}}>
+            ⚠️ Cette action est <strong>irréversible</strong>. Toutes vos données et commandes seront supprimées.
+          </div>
+          <MsgBox msg={dMsg}/>
+          <Field label="Confirmez avec votre mot de passe"><input className="c-inp" type="password" value={dPass} onChange={e=>setDPass(e.target.value)} placeholder="Votre mot de passe actuel"/></Field>
+          <button onClick={doDelete} disabled={dLoading} style={{width:"100%",padding:"14px",borderRadius:14,background:"linear-gradient(135deg,#ef4444,#dc2626)",border:"none",color:"#fff",fontWeight:800,fontSize:14,cursor:"pointer",marginBottom:10,fontFamily:"Outfit,sans-serif"}}>
+            {dLoading?"Suppression...":"🗑 Confirmer la suppression"}
+          </button>
+          <button className="c-btn c-btn-ghost" onClick={()=>setSheet(null)}>Annuler</button>
+        </Sheet>
+      )}
 
       {showAffiliate && <AffiliationSheet session={session} onDone={handleNewAffi} onClose={()=>setShowAffiliate(false)}/>}
       {toast && <Toast msg={toast} icon="✅" onDone={()=>setToast(null)}/>}
