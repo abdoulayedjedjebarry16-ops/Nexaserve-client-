@@ -535,7 +535,8 @@ function MenuScreen({ session, cart, onCartChange, onOpenCart }) {
     const r = session.restaurants?.find(r=>r.id===rid);
     setResto(r);
     // Charger le menu (table menu_items) — colonnes réelles : nom, prix, categorie, desactive, image
-    sb.get("menu_items", `restaurant_id=eq.${encodeURIComponent(rid)}&desactive=eq.false&order=categorie.asc,nom.asc`)
+    // Exclure la chicha (poste=chicha) : non disponible en commande à emporter
+    sb.get("menu_items", `restaurant_id=eq.${encodeURIComponent(rid)}&desactive=eq.false&or=(poste.is.null,poste.neq.chicha)&order=categorie.asc,nom.asc`)
       .then(items => {
         // Normaliser vers le format attendu par le rendu (name, price, category, image_url)
         const normalized = (items||[]).map(p=>({id:p.id,name:p.nom,description:p.description,price:p.prix,category:p.categorie,image_url:p.image,service_id:p.service_id,available:!p.desactive}));
