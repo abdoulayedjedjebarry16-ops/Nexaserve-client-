@@ -115,12 +115,13 @@ const saveCart = (rid,cart) => { localStorage.setItem(CART_KEY(rid),JSON.stringi
 
 // ── STATUTS COMMANDE ───────────────────────────────────────────────
 const STATUTS = {
-  en_attente_validation: { label:"En attente",   color:"#F5A623", bg:"rgba(245,166,35,.15)",  icon:"⏳" },
-  acceptee:              { label:"Acceptée",      color:"#22C55E", bg:"rgba(34,197,94,.15)",   icon:"✅" },
+  en_attente:            { label:"En attente",   color:"#F5A623", bg:"rgba(245,166,35,.15)",  icon:"⏳" },
   en_preparation:        { label:"En préparation",color:"#60a5fa", bg:"rgba(96,165,250,.15)",  icon:"👨‍🍳" },
-  prete:                 { label:"Prête !",        color:"#22C55E", bg:"rgba(34,197,94,.2)",    icon:"🎉" },
-  rejetee:               { label:"Refusée",        color:"#EF4444", bg:"rgba(239,68,68,.15)",   icon:"❌" },
-  livree:                { label:"Récupérée",      color:"#9CA3B0", bg:"rgba(156,163,175,.12)", icon:"📦" },
+  pret:                  { label:"Prête !",        color:"#22C55E", bg:"rgba(34,197,94,.2)",    icon:"🎉" },
+  waiting_client:        { label:"Prête !",        color:"#22C55E", bg:"rgba(34,197,94,.2)",    icon:"🎉" },
+  rejete:                { label:"Refusée",        color:"#EF4444", bg:"rgba(239,68,68,.15)",   icon:"❌" },
+  annule:                { label:"Annulée",        color:"#EF4444", bg:"rgba(239,68,68,.15)",   icon:"❌" },
+  encaisse:              { label:"Récupérée",      color:"#9CA3B0", bg:"rgba(156,163,175,.12)", icon:"📦" },
 };
 
 // ── CSS GLOBAL ─────────────────────────────────────────────────────
@@ -310,165 +311,49 @@ function OfflineBanner() {
 // ═══════════════════════════════════════════════════════════════════
 // SPLASH SCREEN
 // ═══════════════════════════════════════════════════════════════════
-function NxsLogo({ size=90, mb=22 }) {
-  const s = size;
-  const r = Math.round(s * 0.267);
-  return (
-    <svg width={s} height={s} viewBox="0 0 90 90" fill="none" xmlns="http://www.w3.org/2000/svg"
-      style={{display:"block",margin:`0 auto ${mb}px`,filter:"drop-shadow(0 8px 24px rgba(245,166,35,.5))"}}>
-      <defs>
-        <linearGradient id="nxslg" x1="0" y1="0" x2="90" y2="90" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#F5A623"/><stop offset="1" stopColor="#C8780F"/>
-        </linearGradient>
-      </defs>
-      <rect width="90" height="90" rx={r} fill="url(#nxslg)"/>
-      {/* Assiette extérieure */}
-      <ellipse cx="45" cy="48" rx="20" ry="20" fill="none" stroke="white" strokeWidth="2.8" strokeOpacity="0.95"/>
-      {/* Assiette intérieure */}
-      <ellipse cx="45" cy="48" rx="13" ry="13" fill="none" stroke="white" strokeWidth="1.8" strokeOpacity="0.7"/>
-      {/* Fourchette - tige */}
-      <line x1="27" y1="62" x2="27" y2="44" stroke="white" strokeWidth="2.4" strokeLinecap="round"/>
-      {/* Fourchette - dents */}
-      <line x1="24" y1="30" x2="24" y2="38" stroke="white" strokeWidth="1.8" strokeLinecap="round"/>
-      <line x1="27" y1="30" x2="27" y2="44" stroke="white" strokeWidth="1.8" strokeLinecap="round"/>
-      <line x1="30" y1="30" x2="30" y2="38" stroke="white" strokeWidth="1.8" strokeLinecap="round"/>
-      {/* Couteau - tige */}
-      <line x1="63" y1="30" x2="63" y2="62" stroke="white" strokeWidth="2.4" strokeLinecap="round"/>
-      {/* Couteau - lame */}
-      <path d="M63 30 Q70 37 63 44" fill="rgba(255,255,255,0.9)" stroke="white" strokeWidth="0.5"/>
-    </svg>
-  );
-}
-
 function SplashScreen({ onDone }) {
-  useEffect(() => { const t = setTimeout(onDone, 2000); return ()=>clearTimeout(t); }, []);
+  useEffect(() => { const t = setTimeout(onDone, 1800); return ()=>clearTimeout(t); }, []);
   return (
     <div style={{position:"fixed",inset:0,background:"#080A0F",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",zIndex:9999}}>
-      <div style={{animation:"bounceIn .7s cubic-bezier(.34,1.56,.64,1)",textAlign:"center"}}>
-        <NxsLogo size={100} mb={24}/>
-        <h1 style={{fontFamily:"Outfit,sans-serif",fontSize:36,fontWeight:900,color:"#F5A623",letterSpacing:"-0.5px",margin:0}}>NexaServe</h1>
-        <p style={{fontSize:11,color:"#5A6170",letterSpacing:"4px",textTransform:"uppercase",marginTop:8}}>Client</p>
+      <div style={{animation:"bounceIn .6s ease",textAlign:"center"}}>
+        <div style={{width:90,height:90,borderRadius:28,background:"linear-gradient(135deg,#F5A623,#D4891A)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:44,boxShadow:"0 8px 40px rgba(245,166,35,.4)",marginBottom:22,marginLeft:"auto",marginRight:"auto"}}>🍽</div>
+        <h1 style={{fontFamily:"Outfit,sans-serif",fontSize:32,fontWeight:900,color:"#F5A623",letterSpacing:"-0.5px"}}>NexaServe</h1>
+        <p style={{fontSize:12,color:"#5A6170",letterSpacing:"3px",textTransform:"uppercase",marginTop:6}}>Client</p>
       </div>
-      <div style={{position:"absolute",bottom:52,display:"flex",flexDirection:"column",alignItems:"center",gap:10}}>
-        <Spinner size={22} color="#F5A623"/>
-        <span style={{fontSize:11,color:"#5A6170",letterSpacing:"0.5px"}}>Chargement...</span>
+      <div style={{position:"absolute",bottom:48,display:"flex",flexDirection:"column",alignItems:"center",gap:10}}>
+        <Spinner size={24} color="#F5A623"/>
+        <span style={{fontSize:11,color:"#5A6170"}}>Chargement...</span>
       </div>
     </div>
   );
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// CSS NXS AUTH — identique aux autres apps NexaServe
-// ═══════════════════════════════════════════════════════════════════
-const NXS_CSS = `
-  @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800;900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap');
-  .nxs-auth { --bg:#080A0F; --s1:#0F1118; --s2:#171A24; --s3:#1E2230;
-    --gold:#F5A623; --gold2:#D4891A; --goldf:rgba(245,166,35,0.12);
-    --green:#22C55E; --red:#EF4444; --t1:#F0F2F8; --t2:#9CA3B0; --t3:#5A6170;
-    --border:rgba(255,255,255,0.07); --border2:rgba(255,255,255,0.12);
-    min-height:100vh; background:var(--bg); color:var(--t1);
-    font-family:'Plus Jakarta Sans',system-ui,sans-serif;
-    display:flex; flex-direction:column; overflow-y:auto; }
-  .nxs-auth h1,h2 { font-family:'Outfit',sans-serif; }
-  .nxs-logo { text-align:center; padding:52px 0 28px; }
-  .nxs-logo h1 { font-size:30px; font-weight:900; color:var(--gold); letter-spacing:-0.5px; margin:0; }
-  .nxs-logo p { font-size:11px; color:var(--t3); margin:5px 0 0; letter-spacing:2.5px; text-transform:uppercase; }
-  .nxs-card { background:var(--s1); border:1px solid var(--border); border-radius:20px; padding:24px; margin:0 20px; }
-  .nxs-card-title { font-size:20px; font-weight:700; margin:0 0 5px; font-family:'Outfit',sans-serif; }
-  .nxs-card-sub { font-size:13px; color:var(--t3); margin:0 0 22px; line-height:1.5; }
-  .nxs-field { margin-bottom:15px; }
-  .nxs-label { display:block; font-size:11px; font-weight:600; color:var(--t3); margin-bottom:7px; text-transform:uppercase; letter-spacing:.6px; }
-  .nxs-inp-wrap { position:relative; }
-  .nxs-inp { width:100%; background:var(--s2); border:1px solid var(--border2); border-radius:10px;
-    padding:12px 14px; color:var(--t1); font-size:16px; outline:none; box-sizing:border-box;
-    font-family:'Plus Jakarta Sans',system-ui,sans-serif; -webkit-appearance:none; transition:border-color .2s;
-    -webkit-user-select:text; user-select:text; touch-action:manipulation; }
-  .nxs-inp:focus { border-color:var(--gold); }
-  .nxs-inp::placeholder { color:var(--t3); }
-  .nxs-inp-pr { padding-right:44px; }
-  .nxs-inp-eye { position:absolute; right:0; top:0; height:100%; width:42px;
-    display:flex; align-items:center; justify-content:center;
-    color:var(--t3); font-size:16px; background:none; border:none; cursor:pointer; }
-  .nxs-error { background:rgba(239,68,68,.1); border:1px solid rgba(239,68,68,.25);
-    border-radius:10px; padding:11px 14px; margin-bottom:14px;
-    color:#EF4444; font-size:13px; font-weight:500; }
-  .nxs-success { background:rgba(34,197,94,.1); border:1px solid rgba(34,197,94,.25);
-    border-radius:10px; padding:11px 14px; margin-bottom:14px;
-    color:#22C55E; font-size:13px; font-weight:500; }
-  .nxs-btn { width:100%; background:var(--gold); border:none; border-radius:10px;
-    padding:14px; color:#080A0F; font-weight:800; font-size:15px;
-    cursor:pointer; font-family:'Outfit',sans-serif; transition:background .2s; margin-bottom:14px; }
-  .nxs-btn:disabled { opacity:.6; cursor:not-allowed; }
-  .nxs-btn:not(:disabled):hover { background:var(--gold2); }
-  .nxs-links { display:flex; gap:10px; justify-content:center; flex-wrap:wrap; }
-  .nxs-link { font-size:13px; color:var(--gold); background:none; border:none; cursor:pointer; padding:0; font-family:inherit; }
-  .nxs-sep { color:var(--t3); font-size:13px; line-height:1; }
-  .nxs-back { display:flex; align-items:center; gap:8px; font-size:13px; color:var(--t3);
-    background:none; border:none; cursor:pointer; margin-bottom:16px; padding:0; font-family:inherit; }
-  .nxs-footer { text-align:center; padding:20px 0 28px; font-size:11px; color:var(--t3); }
-  .nxs-info { background:var(--goldf); border:1px solid rgba(245,166,35,.2);
-    border-radius:10px; padding:12px 14px; margin-bottom:14px; font-size:13px; color:var(--t2); line-height:1.5; }
-  .nxs-tabs { display:flex; margin:0 0 20px; background:var(--s2); border-radius:14px; padding:4px; gap:4px; }
-  .nxs-tab { flex:1; padding:10px; border-radius:10px; border:none; font-weight:700; font-size:13px;
-    cursor:pointer; font-family:'Outfit',sans-serif; transition:background .2s,color .2s; }
-`;
-
-// ⚠️ Défini HORS du composant pour éviter le démontage à chaque frappe
-const NxsField = ({label, children}) => (
-  <div className="nxs-field">
-    <label className="nxs-label">{label}</label>
-    {children}
-  </div>
-);
-
-// Questions secrètes proposées à l'inscription
-const QUESTIONS_SECRETES = [
-  "Quel est le prénom de votre mère ?",
-  "Quel est le nom de votre école primaire ?",
-  "Quel est le nom de votre premier animal de compagnie ?",
-  "Dans quelle ville êtes-vous né(e) ?",
-  "Quel est le surnom de votre meilleur(e) ami(e) d'enfance ?",
-];
-
-// ═══════════════════════════════════════════════════════════════════
 // AUTH — INSCRIPTION / CONNEXION
 // ═══════════════════════════════════════════════════════════════════
 function AuthPage({ onAuth }) {
-  const [step, setStep]     = useState("login"); // login | register | forgot_pass
+  const [tab, setTab]       = useState(URL_CODE ? "register" : "login");    // login | register
   const [loading, setLoading] = useState(false);
   const [msg, setMsg]       = useState({type:"",text:""});
 
-  // ── Login
+  // Login state
   const [lTel,  setLTel]  = useState("");
   const [lPass, setLPass] = useState("");
-  const [showLP, setShowLP] = useState(false);
 
-  // ── Register
+  // Register state
   const [rPrenom, setRPrenom] = useState("");
   const [rNom,    setRNom]    = useState("");
   const [rTel,    setRTel]    = useState("");
   const [rPass,   setRPass]   = useState("");
   const [rPass2,  setRPass2]  = useState("");
-  const [showRP,  setShowRP]  = useState(false);
   const [rCode,   setRCode]   = useState(URL_CODE || "");
-  const [rQ,      setRQ]      = useState(QUESTIONS_SECRETES[0]);
-  const [rA,      setRA]      = useState("");
 
-  // ── Mot de passe oublié
-  const [fpTel,   setFpTel]   = useState("");
-  const [fpQ,     setFpQ]     = useState("");
-  const [fpA,     setFpA]     = useState("");
-  const [fpNew,   setFpNew]   = useState("");
-  const [fpNew2,  setFpNew2]  = useState("");
-  const [fpClient,setFpClient]= useState(null);
-  const [fpStep,  setFpStep]  = useState(1); // 1=tel, 2=question, 3=nouveau mdp
-
-  const err  = t => setMsg({type:"error",   text:t});
-  const succ = t => setMsg({type:"success",  text:t});
+  const err  = t => setMsg({type:"error",text:t});
+  const succ = t => setMsg({type:"success",text:t});
   const clr  = () => setMsg({type:"",text:""});
 
-  const renderMsg = () => msg.text ? (
-    <div className={msg.type==="error"?"nxs-error":"nxs-success"}>
+  const MsgBox = () => msg.text ? (
+    <div style={{background:msg.type==="error"?"rgba(239,68,68,.1)":"rgba(34,197,94,.1)",border:`1px solid ${msg.type==="error"?"rgba(239,68,68,.3)":"rgba(34,197,94,.3)"}`,borderRadius:12,padding:"11px 14px",marginBottom:14,color:msg.type==="error"?"#EF4444":"#22C55E",fontSize:13,fontWeight:500}}>
       {msg.type==="error"?"⚠️ ":"✓ "}{msg.text}
     </div>
   ) : null;
@@ -481,40 +366,43 @@ function AuthPage({ onAuth }) {
       const rows = await sb.get("clients", `telephone=eq.${encodeURIComponent(lTel.trim())}&select=id,nom,prenom,telephone`);
       if(!rows?.length){ err("Numéro de téléphone introuvable."); setLoading(false); return; }
       const client = rows[0];
+      // Vérifier le mot de passe
       const pwRows = await sb.get("clients", `id=eq.${client.id}&password_hash=eq.${encodeURIComponent(lPass)}&select=id`);
       if(!pwRows?.length){ err("Mot de passe incorrect."); setLoading(false); return; }
+      // Charger les affiliations
       const affs = await sb.get("client_affiliations", `client_id=eq.${client.id}&actif=eq.true&select=restaurant_id,affiliated_at`);
       if(!affs?.length){ err("Aucun restaurant associé. Inscrivez-vous avec un code restaurant."); setLoading(false); return; }
+      // Charger les infos restaurants
       const rids = affs.map(a=>a.restaurant_id);
       const restos = await sb.get("restaurants", `id=in.(${rids.join(",")})&select=id,code,nom,plan,orange_money_numero`);
-      const session = { client, affiliations:affs, restaurants:restos, activeRestaurantId:restos[0]?.id };
+      const session = { client, affiliations: affs, restaurants: restos, activeRestaurantId: restos[0]?.id };
       setSession(session);
       initOneSignal(client.id);
       onAuth(session);
-    } catch(e){ err("Erreur de connexion. Vérifiez votre connexion internet."); }
+    } catch(e){ err("Erreur de connexion : "+e.message); }
     setLoading(false);
   };
 
   // ── INSCRIPTION ────────────────────────────────────────────────
   const doRegister = async () => {
-    if(!rPrenom||!rNom||!rTel||!rPass||!rCode||!rA){ err("Tous les champs sont obligatoires."); return; }
+    if(!rPrenom||!rNom||!rTel||!rPass||!rCode){ err("Tous les champs sont obligatoires."); return; }
     if(rPass!==rPass2){ err("Les mots de passe ne correspondent pas."); return; }
     if(rPass.length<4){ err("Mot de passe trop court (min. 4 caractères)."); return; }
     if(!rCode.trim().toUpperCase().startsWith("NXS")){ err("Code restaurant invalide (format NXS-XXXX)."); return; }
     setLoading(true); clr();
     try {
+      // Vérifier le code restaurant
       const restos = await sb.get("restaurants", `code=eq.${encodeURIComponent(rCode.trim().toUpperCase())}&select=id,nom,plan,statut_abo,date_expiration,orange_money_numero`);
       if(!restos?.length){ err("Code restaurant introuvable. Vérifiez le code NXS-XXXX."); setLoading(false); return; }
       const resto = restos[0];
+      // Vérifier que le téléphone n'existe pas déjà
       const existing = await sb.get("clients", `telephone=eq.${encodeURIComponent(rTel.trim())}&select=id`);
       if(existing?.length){ err("Ce numéro de téléphone est déjà utilisé."); setLoading(false); return; }
-      const clientBody = {
-        id:uid(), nom:rNom.trim(), prenom:rPrenom.trim(), telephone:rTel.trim(),
-        password_hash:rPass, secret_question:rQ, secret_answer:rA.toLowerCase().trim(),
-        created_at:new Date().toISOString()
-      };
+      // Créer le client
+      const clientBody = { id:uid(), nom:rNom.trim(), prenom:rPrenom.trim(), telephone:rTel.trim(), password_hash:rPass, created_at:new Date().toISOString() };
       const clients = await sb.post("clients", clientBody);
       const client = clients[0] || clientBody;
+      // Créer l'affiliation
       await sb.post("client_affiliations", { id:uid(), client_id:client.id, restaurant_id:resto.id, affiliated_at:new Date().toISOString(), actif:true });
       const session = { client, affiliations:[{restaurant_id:resto.id,affiliated_at:new Date().toISOString(),actif:true}], restaurants:[resto], activeRestaurantId:resto.id };
       setSession(session);
@@ -524,193 +412,64 @@ function AuthPage({ onAuth }) {
     setLoading(false);
   };
 
-  // ── MOT DE PASSE OUBLIÉ — étape 1 : trouver le client par téléphone
-  const fpFind = async () => {
-    if(!fpTel){ err("Numéro de téléphone requis."); return; }
-    setLoading(true); clr();
-    try {
-      const rows = await sb.get("clients", `telephone=eq.${encodeURIComponent(fpTel.trim())}&select=id,nom,prenom,secret_question`);
-      if(!rows?.length){ err("Aucun compte trouvé avec ce numéro."); setLoading(false); return; }
-      const client = rows[0];
-      if(!client.secret_question){ err("Question secrète non configurée pour ce compte."); setLoading(false); return; }
-      setFpClient(client);
-      setFpQ(client.secret_question);
-      setFpStep(2);
-    } catch(e){ err("Erreur réseau."); }
-    setLoading(false);
-  };
-
-  // ── MOT DE PASSE OUBLIÉ — étape 2 : vérifier la réponse secrète
-  const fpVerify = async () => {
-    if(!fpA){ err("Veuillez répondre à la question secrète."); return; }
-    setLoading(true); clr();
-    try {
-      const rows = await sb.get("clients", `id=eq.${encodeURIComponent(fpClient.id)}&select=secret_answer`);
-      const correct = rows?.[0]?.secret_answer || "";
-      if(fpA.toLowerCase().trim() !== correct.toLowerCase().trim()){ err("Réponse incorrecte."); setLoading(false); return; }
-      setFpStep(3);
-    } catch(e){ err("Erreur réseau."); }
-    setLoading(false);
-  };
-
-  // ── MOT DE PASSE OUBLIÉ — étape 3 : nouveau mot de passe
-  const fpReset = async () => {
-    if(!fpNew||fpNew!==fpNew2){ err("Les mots de passe ne correspondent pas."); return; }
-    if(fpNew.length<4){ err("Mot de passe trop court (minimum 4 caractères)."); return; }
-    setLoading(true); clr();
-    try {
-      await sb.patch("clients", `id=eq.${fpClient.id}`, {password_hash:fpNew});
-      succ("Mot de passe réinitialisé avec succès !");
-      setTimeout(()=>{ setStep("login"); setFpStep(1); setFpTel(""); setFpA(""); setFpNew(""); setFpNew2(""); clr(); }, 2000);
-    } catch(e){ err("Erreur lors de la réinitialisation."); }
-    setLoading(false);
-  };
-
   return (
-    <>
-      <style>{NXS_CSS}</style>
-      <div className="nxs-auth">
-        <OfflineBanner/>
-
-        {/* Logo */}
-        <div className="nxs-logo">
-          <NxsLogo size={80} mb={14}/>
-          <h1>NexaServe</h1>
-          <p>Client</p>
-        </div>
-
-        {/* ── CONNEXION ── */}
-        {step==="login" && (
-          <div className="nxs-card">
-            <h2 className="nxs-card-title">Connexion</h2>
-            <p className="nxs-card-sub">Connectez-vous avec votre numéro de téléphone</p>
-            {renderMsg()}
-            <NxsField label="Numéro de téléphone">
-              <input className="nxs-inp" value={lTel} onChange={e=>{setLTel(e.target.value);clr();}}
-                onKeyDown={e=>e.key==="Enter"&&doLogin()} placeholder="6XX XX XX XX" type="tel" inputMode="tel"/>
-            </NxsField>
-            <NxsField label="Mot de passe">
-              <div className="nxs-inp-wrap">
-                <input className="nxs-inp nxs-inp-pr" type={showLP?"text":"password"} value={lPass}
-                  onChange={e=>{setLPass(e.target.value);clr();}}
-                  onKeyDown={e=>e.key==="Enter"&&doLogin()} placeholder="••••••••"/>
-                <button className="nxs-inp-eye" onClick={()=>setShowLP(s=>!s)} type="button">{showLP?"🙈":"👁️"}</button>
-              </div>
-            </NxsField>
-            <button className="nxs-btn" onClick={doLogin} disabled={loading}>
-              {loading?"Connexion en cours...":"Se connecter"}
-            </button>
-            <div className="nxs-links">
-              <button className="nxs-link" onClick={()=>{setStep("forgot_pass");setFpStep(1);clr();}}>Mot de passe oublié ?</button>
-              <span className="nxs-sep">·</span>
-              <button className="nxs-link" onClick={()=>{setStep("register");clr();}}>Créer un compte</button>
-            </div>
-          </div>
-        )}
-
-        {/* ── INSCRIPTION ── */}
-        {step==="register" && (
-          <div className="nxs-card">
-            <button className="nxs-back" onClick={()=>{setStep("login");clr();}}>← Retour</button>
-            <h2 className="nxs-card-title">Créer un compte</h2>
-            <p className="nxs-card-sub">Inscrivez-vous avec le code de votre restaurant</p>
-            {renderMsg()}
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-              <NxsField label="Prénom">
-                <input className="nxs-inp" value={rPrenom} onChange={e=>{setRPrenom(e.target.value);clr();}} placeholder="Prénom"/>
-              </NxsField>
-              <NxsField label="Nom">
-                <input className="nxs-inp" value={rNom} onChange={e=>{setRNom(e.target.value);clr();}} placeholder="Nom"/>
-              </NxsField>
-            </div>
-            <NxsField label="Numéro de téléphone">
-              <input className="nxs-inp" value={rTel} onChange={e=>{setRTel(e.target.value);clr();}} placeholder="6XX XX XX XX" type="tel" inputMode="tel"/>
-            </NxsField>
-            <NxsField label="Mot de passe">
-              <div className="nxs-inp-wrap">
-                <input className="nxs-inp nxs-inp-pr" type={showRP?"text":"password"} value={rPass}
-                  onChange={e=>{setRPass(e.target.value);clr();}} placeholder="••••••••"/>
-                <button className="nxs-inp-eye" onClick={()=>setShowRP(s=>!s)} type="button">{showRP?"🙈":"👁️"}</button>
-              </div>
-            </NxsField>
-            <NxsField label="Confirmer le mot de passe">
-              <input className="nxs-inp" type="password" value={rPass2} onChange={e=>{setRPass2(e.target.value);clr();}} placeholder="••••••••"/>
-            </NxsField>
-            <NxsField label="Code restaurant (obligatoire)">
-              <input className="nxs-inp" value={rCode} onChange={e=>{setRCode(e.target.value.toUpperCase());clr();}}
-                placeholder="NXS-XXXX" style={{letterSpacing:"0.1em",fontWeight:700}}/>
-            </NxsField>
-            <div className="nxs-info">
-              💡 Le code NXS-XXXX vous est fourni par votre restaurant. Scannez le QR code ou saisissez-le manuellement.
-            </div>
-            {/* Question secrète */}
-            <NxsField label="Question secrète (pour récupérer votre mot de passe)">
-              <select className="nxs-inp" value={rQ} onChange={e=>{setRQ(e.target.value);clr();}} style={{cursor:"pointer"}}>
-                {QUESTIONS_SECRETES.map(q=><option key={q} value={q}>{q}</option>)}
-              </select>
-            </NxsField>
-            <NxsField label="Votre réponse secrète">
-              <input className="nxs-inp" value={rA} onChange={e=>{setRA(e.target.value);clr();}}
-                placeholder="Réponse confidentielle..." autoCapitalize="none" autoCorrect="off"/>
-            </NxsField>
-            <div className="nxs-info" style={{background:"rgba(239,68,68,.07)",borderColor:"rgba(239,68,68,.2)"}}>
-              🔒 Gardez votre réponse secrète en sécurité. Elle servira uniquement à récupérer votre mot de passe.
-            </div>
-            <button className="nxs-btn" onClick={doRegister} disabled={loading}>
-              {loading?"Création du compte...":"Créer mon compte"}
-            </button>
-            <div className="nxs-links">
-              <button className="nxs-link" onClick={()=>{setStep("login");clr();}}>Déjà inscrit ? Se connecter</button>
-            </div>
-          </div>
-        )}
-
-        {/* ── MOT DE PASSE OUBLIÉ ── */}
-        {step==="forgot_pass" && (
-          <div className="nxs-card">
-            <button className="nxs-back" onClick={()=>{setStep("login");clr();}}>← Retour</button>
-            <h2 className="nxs-card-title">Mot de passe oublié</h2>
-            {renderMsg()}
-
-            {fpStep===1 && <>
-              <p className="nxs-card-sub">Saisissez votre numéro de téléphone pour retrouver votre compte.</p>
-              <NxsField label="Numéro de téléphone">
-                <input className="nxs-inp" value={fpTel} onChange={e=>{setFpTel(e.target.value);clr();}}
-                  placeholder="6XX XX XX XX" type="tel" inputMode="tel"/>
-              </NxsField>
-              <button className="nxs-btn" onClick={fpFind} disabled={loading}>{loading?"Recherche...":"Continuer"}</button>
-            </>}
-
-            {fpStep===2 && <>
-              <div className="nxs-info">
-                📋 Bonjour <strong>{fpClient?.prenom} {fpClient?.nom}</strong>. Répondez à votre question secrète.
-              </div>
-              <NxsField label="Question secrète">
-                <input className="nxs-inp" value={fpQ} readOnly style={{color:"#F5A623",fontWeight:600}}/>
-              </NxsField>
-              <NxsField label="Votre réponse">
-                <input className="nxs-inp" value={fpA} onChange={e=>{setFpA(e.target.value);clr();}}
-                  placeholder="Votre réponse..." autoCapitalize="none"/>
-              </NxsField>
-              <button className="nxs-btn" onClick={fpVerify} disabled={loading}>{loading?"Vérification...":"Vérifier"}</button>
-            </>}
-
-            {fpStep===3 && <>
-              <p className="nxs-card-sub">Choisissez un nouveau mot de passe pour <strong style={{color:"#F5A623"}}>{fpClient?.prenom} {fpClient?.nom}</strong>.</p>
-              <NxsField label="Nouveau mot de passe">
-                <input className="nxs-inp" type="password" value={fpNew} onChange={e=>{setFpNew(e.target.value);clr();}} placeholder="••••••••"/>
-              </NxsField>
-              <NxsField label="Confirmer le mot de passe">
-                <input className="nxs-inp" type="password" value={fpNew2} onChange={e=>{setFpNew2(e.target.value);clr();}} placeholder="••••••••"/>
-              </NxsField>
-              <button className="nxs-btn" onClick={fpReset} disabled={loading}>{loading?"Réinitialisation...":"Enregistrer"}</button>
-            </>}
-          </div>
-        )}
-
-        <div className="nxs-footer">© 2026 NexaServe · Réseau privé restauration</div>
+    <div style={{minHeight:"100vh",background:"#080A0F",display:"flex",flexDirection:"column",overflowY:"auto"}}>
+      <style>{GLOBAL_CSS}</style>
+      <OfflineBanner/>
+      {/* Logo */}
+      <div style={{textAlign:"center",padding:"44px 0 28px"}}>
+        <div style={{width:72,height:72,borderRadius:22,background:"linear-gradient(135deg,#F5A623,#D4891A)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:34,boxShadow:"0 6px 30px rgba(245,166,35,.35)",margin:"0 auto 16px"}}>🍽</div>
+        <h1 style={{fontFamily:"Outfit,sans-serif",fontSize:28,fontWeight:900,color:"#F5A623",letterSpacing:"-0.5px"}}>NexaServe</h1>
+        <p style={{fontSize:11,color:"#5A6170",letterSpacing:"3px",textTransform:"uppercase",marginTop:5}}>Client</p>
       </div>
-    </>
+
+      {/* Tabs */}
+      <div style={{display:"flex",margin:"0 20px 20px",background:"#0F1118",borderRadius:14,padding:4,gap:4}}>
+        {[{id:"login",l:"Connexion"},{id:"register",l:"Inscription"}].map(t=>(
+          <button key={t.id} onClick={()=>{setTab(t.id);clr();}} style={{flex:1,padding:"10px",borderRadius:10,border:"none",background:tab===t.id?"#F5A623":  "none",color:tab===t.id?"#080A0F":"#5A6170",fontWeight:700,fontSize:13,cursor:"pointer",fontFamily:"Outfit,sans-serif",transition:"background .2s,color .2s"}}>{t.l}</button>
+        ))}
+      </div>
+
+      {/* Card */}
+      <div style={{margin:"0 20px",background:"#0F1118",borderRadius:20,padding:"22px 20px",border:"1px solid rgba(255,255,255,.07)"}}>
+        <MsgBox/>
+
+        {tab==="login" && <>
+          <Field label="Numéro de téléphone">
+            <input className="c-inp" value={lTel} onChange={e=>{setLTel(e.target.value);clr();}} placeholder="6XX XX XX XX" type="tel" inputMode="tel"/>
+          </Field>
+          <Field label="Mot de passe">
+            <InpEye value={lPass} onChange={e=>{setLPass(e.target.value);clr();}}/>
+          </Field>
+          <button className="c-btn" onClick={doLogin} disabled={loading} style={{marginTop:4}}>
+            {loading?"Connexion...":" Se connecter"}
+          </button>
+        </>}
+
+        {tab==="register" && <>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+            <Field label="Prénom"><input className="c-inp" value={rPrenom} onChange={e=>{setRPrenom(e.target.value);clr();}} placeholder="Prénom"/></Field>
+            <Field label="Nom"><input className="c-inp" value={rNom} onChange={e=>{setRNom(e.target.value);clr();}} placeholder="Nom"/></Field>
+          </div>
+          <Field label="Téléphone">
+            <input className="c-inp" value={rTel} onChange={e=>{setRTel(e.target.value);clr();}} placeholder="6XX XX XX XX" type="tel" inputMode="tel"/>
+          </Field>
+          <Field label="Mot de passe"><InpEye value={rPass} onChange={e=>{setRPass(e.target.value);clr();}}/></Field>
+          <Field label="Confirmer le mot de passe"><InpEye value={rPass2} onChange={e=>{setRPass2(e.target.value);clr();}}/></Field>
+          <Field label="Code restaurant (obligatoire)">
+            <input className="c-inp" value={rCode} onChange={e=>{setRCode(e.target.value.toUpperCase());clr();}} placeholder="NXS-XXXX" style={{letterSpacing:"0.1em",fontWeight:700}}/>
+          </Field>
+          <div style={{background:"rgba(245,166,35,.08)",border:"1px solid rgba(245,166,35,.2)",borderRadius:10,padding:"10px 14px",marginBottom:16,fontSize:12,color:"#9CA3B0",lineHeight:1.5}}>
+            💡 Le code restaurant vous est fourni par votre restaurant. Scannez le QR code ou saisissez-le manuellement.
+          </div>
+          <button className="c-btn" onClick={doRegister} disabled={loading}>
+            {loading?"Création du compte...":"Créer mon compte"}
+          </button>
+        </>}
+      </div>
+
+      <div style={{textAlign:"center",padding:"20px 0 32px",fontSize:11,color:"#5A6170"}}>© 2026 NexaServe · Réseau privé restauration</div>
+    </div>
   );
 }
 
@@ -775,21 +534,11 @@ function MenuScreen({ session, cart, onCartChange, onOpenCart }) {
     setLoading(true);
     const r = session.restaurants?.find(r=>r.id===rid);
     setResto(r);
-    // Colonnes réelles : nom, prix, categorie, desactive, image, service_id
-    // Exclure explicitement le poste Chicha — seuls Cuisine et Bar sont visibles
-    sb.get("menu_items", `restaurant_id=eq.${encodeURIComponent(rid)}&desactive=eq.false&poste=neq.Chicha&order=categorie.asc,nom.asc`)
+    // Charger le menu (table menu_items) — colonnes réelles : nom, prix, categorie, desactive, image
+    sb.get("menu_items", `restaurant_id=eq.${encodeURIComponent(rid)}&desactive=eq.false&order=categorie.asc,nom.asc`)
       .then(items => {
-        const normalized = (items||[])
-          .filter(p => !p.poste || p.poste.toLowerCase() !== "chicha")
-          .map(p=>({
-            id:         p.id,
-            name:       p.nom,
-            price:      p.prix,
-            category:   p.categorie,
-            image_url:  p.image,
-            service_id: p.service_id,
-            poste:      p.poste,
-          }));
+        // Normaliser vers le format attendu par le rendu (name, price, category, image_url)
+        const normalized = (items||[]).map(p=>({id:p.id,name:p.nom,description:p.description,price:p.prix,category:p.categorie,image_url:p.image,service_id:p.service_id,available:!p.desactive}));
         setMenu(normalized);
         const cats = [...new Set(normalized.map(i=>i.category).filter(Boolean))];
         setCats(cats);
@@ -1005,7 +754,7 @@ function OrderTracker({ orderId, onClose }) {
 
   const load = useCallback(async () => {
     try {
-      const rows = await sb.get("orders", `id=eq.${orderId}&select=id,statut,total,created_at,motif_rejet,client_nom,mode_paiement_client,order_items(name,quantity,price)`);
+      const rows = await sb.get("orders", `id=eq.${orderId}&select=id,statut,total,created_at,motif_rejet,client_nom,mode_paiement_client,items`);
       if(rows?.length) setOrder(rows[0]);
     } catch(e){}
     setLoading(false);
@@ -1019,14 +768,14 @@ function OrderTracker({ orderId, onClose }) {
   }, [load]);
 
   const STEPS = [
-    {id:"en_attente_validation",label:"En attente de validation",icon:"⏳"},
-    {id:"acceptee",label:"Commande acceptée",icon:"✅"},
+    {id:"en_attente",label:"En attente de validation",icon:"⏳"},
     {id:"en_preparation",label:"En préparation",icon:"👨‍🍳"},
-    {id:"prete",label:"Commande prête !",icon:"🎉"},
+    {id:"pret",label:"Commande prête !",icon:"🎉"},
   ];
 
-  const statutIdx = order ? STEPS.findIndex(s=>s.id===order.statut) : -1;
-  const isRejetee = order?.statut==="rejetee";
+  const statutNorm = order?.statut==="waiting_client" ? "pret" : order?.statut;
+  const statutIdx = order ? STEPS.findIndex(s=>s.id===statutNorm) : -1;
+  const isRejetee = order?.statut==="rejete" || order?.statut==="annule";
 
   return (
     <Sheet title="Suivi commande" onClose={onClose}>
@@ -1071,13 +820,13 @@ function OrderTracker({ orderId, onClose }) {
           )}
 
           {/* Détail articles */}
-          {order.order_items?.length>0 && (
+          {order.items?.length>0 && (
             <div style={{marginBottom:16}}>
               <div style={{fontSize:12,fontWeight:700,color:"#5A6170",textTransform:"uppercase",letterSpacing:".5px",marginBottom:10}}>Articles commandés</div>
-              {order.order_items.map((item,i)=>(
+              {order.items.map((item,i)=>(
                 <div key={i} style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid rgba(255,255,255,.05)"}}>
-                  <span style={{fontSize:13,color:"#9CA3B0"}}>{item.quantity}× {item.name}</span>
-                  <span style={{fontSize:13,fontWeight:700,color:"#F0F2F8"}}>{fmt((item.price||0)*item.quantity)}</span>
+                  <span style={{fontSize:13,color:"#9CA3B0"}}>{item.qty}× {item.nom}</span>
+                  <span style={{fontSize:13,fontWeight:700,color:"#F0F2F8"}}>{fmt((item.prix||0)*item.qty)}</span>
                 </div>
               ))}
             </div>
@@ -1187,105 +936,9 @@ function NotificationsScreen({ session }) {
 function ProfilScreen({ session, onLogout, onSessionUpdate }) {
   const { client, restaurants, affiliations } = session;
   const [showAffiliate, setShowAffiliate] = useState(false);
-  const [toast, setToast]   = useState(null);
-  const [sheet, setSheet]   = useState(null); // null | "edit" | "password" | "delete"
-
-  // Photo de profil (stockée localement uniquement)
-  const PHOTO_KEY = `nxsc_photo_${client.id}`;
-  const [photo, setPhoto] = useState(() => { try { return localStorage.getItem(PHOTO_KEY)||null; } catch(e){return null;} });
-
-  // ── Modifier infos
-  const [ePrenom, setEPrenom] = useState(client.prenom||"");
-  const [eNom,    setENom]    = useState(client.nom||"");
-  const [eTel,    setETel]    = useState(client.telephone||"");
-  const [eLoading,setELoading]= useState(false);
-  const [eMsg,    setEMsg]    = useState({type:"",text:""});
-
-  // ── Changer mot de passe
-  const [pOld,  setPOld]  = useState("");
-  const [pNew,  setPNew]  = useState("");
-  const [pNew2, setPNew2] = useState("");
-  const [pLoading,setPLoading] = useState(false);
-  const [pMsg,  setPMsg]  = useState({type:"",text:""});
-
-  // ── Supprimer compte
-  const [dPass,   setDPass]   = useState("");
-  const [dLoading,setDLoading]= useState(false);
-  const [dMsg,    setDMsg]    = useState({type:"",text:""});
+  const [toast, setToast] = useState(null);
 
   const nomComplet = `${client.prenom||""} ${client.nom||""}`.trim();
-
-  const MsgBox = ({msg}) => msg.text ? (
-    <div style={{background:msg.type==="error"?"rgba(239,68,68,.1)":"rgba(34,197,94,.1)",
-      border:`1px solid ${msg.type==="error"?"rgba(239,68,68,.3)":"rgba(34,197,94,.3)"}`,
-      borderRadius:10,padding:"10px 14px",marginBottom:14,
-      color:msg.type==="error"?"#EF4444":"#22C55E",fontSize:13,fontWeight:500}}>
-      {msg.type==="error"?"⚠️ ":"✓ "}{msg.text}
-    </div>
-  ) : null;
-
-  // ── Photo de profil
-  const handlePhoto = (e) => {
-    const file = e.target.files?.[0];
-    if(!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const data = ev.target.result;
-      localStorage.setItem(PHOTO_KEY, data);
-      setPhoto(data);
-      setToast("Photo de profil mise à jour !");
-    };
-    reader.readAsDataURL(file);
-  };
-
-  // ── Modifier infos
-  const doEditInfo = async () => {
-    if(!ePrenom||!eNom||!eTel){ setEMsg({type:"error",text:"Tous les champs sont obligatoires."}); return; }
-    setELoading(true); setEMsg({type:"",text:""});
-    try {
-      await sb.patch("clients", `id=eq.${client.id}`, {prenom:ePrenom.trim(),nom:eNom.trim(),telephone:eTel.trim()});
-      const newClient = {...client,prenom:ePrenom.trim(),nom:eNom.trim(),telephone:eTel.trim()};
-      const newSession = {...session,client:newClient};
-      setSession(newSession);
-      onSessionUpdate(newSession);
-      setEMsg({type:"success",text:"Informations mises à jour !"});
-      setTimeout(()=>setSheet(null),1500);
-    } catch(e){ setEMsg({type:"error",text:"Erreur : "+e.message}); }
-    setELoading(false);
-  };
-
-  // ── Changer mot de passe
-  const doChangePass = async () => {
-    if(!pOld||!pNew||!pNew2){ setPMsg({type:"error",text:"Tous les champs sont obligatoires."}); return; }
-    if(pNew!==pNew2){ setPMsg({type:"error",text:"Les nouveaux mots de passe ne correspondent pas."}); return; }
-    if(pNew.length<4){ setPMsg({type:"error",text:"Mot de passe trop court (min. 4 caractères)."}); return; }
-    setPLoading(true); setPMsg({type:"",text:""});
-    try {
-      const rows = await sb.get("clients",`id=eq.${client.id}&password_hash=eq.${encodeURIComponent(pOld)}&select=id`);
-      if(!rows?.length){ setPMsg({type:"error",text:"Mot de passe actuel incorrect."}); setPLoading(false); return; }
-      await sb.patch("clients",`id=eq.${client.id}`,{password_hash:pNew});
-      setPMsg({type:"success",text:"Mot de passe modifié avec succès !"});
-      setTimeout(()=>{ setSheet(null); setPOld(""); setPNew(""); setPNew2(""); },1500);
-    } catch(e){ setPMsg({type:"error",text:"Erreur : "+e.message}); }
-    setPLoading(false);
-  };
-
-  // ── Supprimer compte
-  const doDelete = async () => {
-    if(!dPass){ setDMsg({type:"error",text:"Mot de passe requis pour confirmer."}); return; }
-    setDLoading(true); setDMsg({type:"",text:""});
-    try {
-      const rows = await sb.get("clients",`id=eq.${client.id}&password_hash=eq.${encodeURIComponent(dPass)}&select=id`);
-      if(!rows?.length){ setDMsg({type:"error",text:"Mot de passe incorrect."}); setDLoading(false); return; }
-      // Désactiver affiliations
-      await sb.patch("client_affiliations",`client_id=eq.${client.id}`,{actif:false});
-      // Supprimer les données locales
-      localStorage.removeItem(PHOTO_KEY);
-      clearSession();
-      onLogout();
-    } catch(e){ setDMsg({type:"error",text:"Erreur : "+e.message}); }
-    setDLoading(false);
-  };
 
   const handleNewAffi = (resto) => {
     const newSession = {
@@ -1299,42 +952,17 @@ function ProfilScreen({ session, onLogout, onSessionUpdate }) {
     setToast("Affilié à "+resto.nom+" !");
   };
 
-  const inputRef = useRef();
-
   return (
     <div style={{padding:"20px 16px",paddingBottom:100}}>
       <h2 style={{fontFamily:"Outfit,sans-serif",fontSize:22,fontWeight:800,marginBottom:20,color:"#F0F2F8"}}>Mon profil</h2>
 
       {/* Avatar + Infos */}
       <div style={{background:"linear-gradient(135deg,rgba(245,166,35,.15),rgba(245,166,35,.05))",border:"1px solid rgba(245,166,35,.2)",borderRadius:20,padding:"22px",marginBottom:20,textAlign:"center"}}>
-        {/* Photo cliquable */}
-        <div style={{position:"relative",width:80,height:80,margin:"0 auto 14px",cursor:"pointer"}} onClick={()=>inputRef.current?.click()}>
-          {photo
-            ? <img src={photo} alt="profil" style={{width:80,height:80,borderRadius:24,objectFit:"cover",border:"3px solid #F5A623"}}/>
-            : <div style={{width:80,height:80,borderRadius:24,background:"linear-gradient(135deg,#F5A623,#D4891A)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:34,boxShadow:"0 4px 20px rgba(245,166,35,.3)"}}>
-                {(client.prenom||"U").charAt(0).toUpperCase()}
-              </div>
-          }
-          <div style={{position:"absolute",bottom:-4,right:-4,width:26,height:26,borderRadius:"50%",background:"#F5A623",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,border:"2px solid #080A0F"}}>📷</div>
+        <div style={{width:72,height:72,borderRadius:22,background:"linear-gradient(135deg,#F5A623,#D4891A)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:32,margin:"0 auto 14px",boxShadow:"0 4px 20px rgba(245,166,35,.3)"}}>
+          {(client.prenom||"U").charAt(0).toUpperCase()}
         </div>
-        <input ref={inputRef} type="file" accept="image/*" style={{display:"none"}} onChange={handlePhoto}/>
         <div style={{fontFamily:"Outfit,sans-serif",fontWeight:800,fontSize:20,color:"#F0F2F8"}}>{nomComplet}</div>
         <div style={{fontSize:13,color:"#9CA3B0",marginTop:5}}>📞 {client.telephone}</div>
-        <div style={{fontSize:11,color:"#5A6170",marginTop:4}}>Appuyez sur la photo pour la modifier</div>
-      </div>
-
-      {/* Actions profil */}
-      <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:20}}>
-        <button onClick={()=>setSheet("edit")} className="c-card" style={{display:"flex",alignItems:"center",gap:14,cursor:"pointer",border:"1px solid rgba(255,255,255,.07)",textAlign:"left",width:"100%",background:"#0F1118"}}>
-          <span style={{fontSize:22}}>✏️</span>
-          <div style={{flex:1}}><div style={{fontWeight:700,color:"#F0F2F8",fontSize:14}}>Modifier mes informations</div><div style={{fontSize:12,color:"#5A6170",marginTop:2}}>Nom, prénom, téléphone</div></div>
-          <span style={{color:"#5A6170",fontSize:16}}>›</span>
-        </button>
-        <button onClick={()=>setSheet("password")} className="c-card" style={{display:"flex",alignItems:"center",gap:14,cursor:"pointer",border:"1px solid rgba(255,255,255,.07)",textAlign:"left",width:"100%",background:"#0F1118"}}>
-          <span style={{fontSize:22}}>🔑</span>
-          <div style={{flex:1}}><div style={{fontWeight:700,color:"#F0F2F8",fontSize:14}}>Changer le mot de passe</div><div style={{fontSize:12,color:"#5A6170",marginTop:2}}>Sécurisez votre compte</div></div>
-          <span style={{color:"#5A6170",fontSize:16}}>›</span>
-        </button>
       </div>
 
       {/* Mes restaurants */}
@@ -1358,57 +986,9 @@ function ProfilScreen({ session, onLogout, onSessionUpdate }) {
       </div>
 
       {/* Déconnexion */}
-      <button className="c-btn c-btn-danger" onClick={onLogout} style={{width:"100%",padding:"14px",borderRadius:14,fontWeight:700,fontSize:14,cursor:"pointer",fontFamily:"Outfit,sans-serif",marginBottom:14}}>
+      <button className="c-btn c-btn-danger" onClick={onLogout} style={{width:"100%",padding:"14px",borderRadius:14,fontWeight:700,fontSize:14,cursor:"pointer",fontFamily:"Outfit,sans-serif"}}>
         🚪 Se déconnecter
       </button>
-
-      {/* Zone danger */}
-      <div style={{border:"1px solid rgba(239,68,68,.25)",borderRadius:16,padding:"16px",background:"rgba(239,68,68,.04)"}}>
-        <div style={{fontWeight:700,color:"#EF4444",fontSize:13,marginBottom:6}}>⚠️ Zone de danger</div>
-        <div style={{fontSize:12,color:"#9CA3B0",marginBottom:12,lineHeight:1.5}}>La suppression de votre compte est irréversible. Toutes vos données seront perdues.</div>
-        <button onClick={()=>setSheet("delete")} style={{width:"100%",padding:"12px",borderRadius:12,background:"rgba(239,68,68,.12)",border:"1px solid rgba(239,68,68,.3)",color:"#EF4444",fontWeight:700,fontSize:13,cursor:"pointer"}}>
-          🗑 Supprimer mon compte
-        </button>
-      </div>
-
-      {/* ── Sheet : Modifier infos */}
-      {sheet==="edit" && (
-        <Sheet title="Modifier mes informations" onClose={()=>setSheet(null)}>
-          <MsgBox msg={eMsg}/>
-          <Field label="Prénom"><input className="c-inp" value={ePrenom} onChange={e=>setEPrenom(e.target.value)} placeholder="Prénom"/></Field>
-          <Field label="Nom"><input className="c-inp" value={eNom} onChange={e=>setENom(e.target.value)} placeholder="Nom"/></Field>
-          <Field label="Téléphone"><input className="c-inp" value={eTel} onChange={e=>setETel(e.target.value)} placeholder="6XX XX XX XX" type="tel"/></Field>
-          <button className="c-btn" onClick={doEditInfo} disabled={eLoading} style={{marginBottom:10}}>{eLoading?"Enregistrement...":"Enregistrer"}</button>
-          <button className="c-btn c-btn-ghost" onClick={()=>setSheet(null)}>Annuler</button>
-        </Sheet>
-      )}
-
-      {/* ── Sheet : Changer mot de passe */}
-      {sheet==="password" && (
-        <Sheet title="Changer le mot de passe" onClose={()=>setSheet(null)}>
-          <MsgBox msg={pMsg}/>
-          <Field label="Mot de passe actuel"><input className="c-inp" type="password" value={pOld} onChange={e=>setPOld(e.target.value)} placeholder="••••••••"/></Field>
-          <Field label="Nouveau mot de passe"><input className="c-inp" type="password" value={pNew} onChange={e=>setPNew(e.target.value)} placeholder="••••••••"/></Field>
-          <Field label="Confirmer le nouveau mot de passe"><input className="c-inp" type="password" value={pNew2} onChange={e=>setPNew2(e.target.value)} placeholder="••••••••"/></Field>
-          <button className="c-btn" onClick={doChangePass} disabled={pLoading} style={{marginBottom:10}}>{pLoading?"Modification...":"Modifier le mot de passe"}</button>
-          <button className="c-btn c-btn-ghost" onClick={()=>setSheet(null)}>Annuler</button>
-        </Sheet>
-      )}
-
-      {/* ── Sheet : Supprimer compte */}
-      {sheet==="delete" && (
-        <Sheet title="Supprimer mon compte" onClose={()=>setSheet(null)}>
-          <div style={{background:"rgba(239,68,68,.08)",border:"1px solid rgba(239,68,68,.25)",borderRadius:12,padding:"12px 14px",marginBottom:16,fontSize:13,color:"#EF4444",lineHeight:1.5}}>
-            ⚠️ Cette action est <strong>irréversible</strong>. Toutes vos données et commandes seront supprimées.
-          </div>
-          <MsgBox msg={dMsg}/>
-          <Field label="Confirmez avec votre mot de passe"><input className="c-inp" type="password" value={dPass} onChange={e=>setDPass(e.target.value)} placeholder="Votre mot de passe actuel"/></Field>
-          <button onClick={doDelete} disabled={dLoading} style={{width:"100%",padding:"14px",borderRadius:14,background:"linear-gradient(135deg,#ef4444,#dc2626)",border:"none",color:"#fff",fontWeight:800,fontSize:14,cursor:"pointer",marginBottom:10,fontFamily:"Outfit,sans-serif"}}>
-            {dLoading?"Suppression...":"🗑 Confirmer la suppression"}
-          </button>
-          <button className="c-btn c-btn-ghost" onClick={()=>setSheet(null)}>Annuler</button>
-        </Sheet>
-      )}
 
       {showAffiliate && <AffiliationSheet session={session} onDone={handleNewAffi} onClose={()=>setShowAffiliate(false)}/>}
       {toast && <Toast msg={toast} icon="✅" onDone={()=>setToast(null)}/>}
@@ -1469,13 +1049,22 @@ function MainApp({ session: initialSession, onLogout }) {
   const handleOrder = async ({ cart, mode, total }) => {
     const client = session.client;
     const nomComplet = `${client.prenom||""} ${client.nom||""}`.trim();
+    // Articles de la commande (stockés en jsonb dans orders.items)
+    const items = cart.map(c=>({
+      id: uid(),
+      nom: c.name,
+      qty: c.qty,
+      prix: c.price,
+      service_id: c.service_id||null,
+    }));
     // Créer la commande dans la table orders
     const orderBody = {
       id: uid(),
       restaurant_id: rid,
-      type: "emporter",
-      statut: "en_attente_validation",
+      is_takeaway: true,
+      statut: "en_attente",
       total: total,
+      items: items,
       client_id: client.id,
       is_client_order: true,
       client_nom: nomComplet,
@@ -1487,17 +1076,6 @@ function MainApp({ session: initialSession, onLogout }) {
     // Insérer la commande
     const orderRows = await sb.post("orders", orderBody);
     const orderId = orderRows?.[0]?.id || orderBody.id;
-    // Insérer les articles
-    const items = cart.map(c=>({
-      id: uid(),
-      order_id: orderId,
-      restaurant_id: rid,
-      name: c.name,
-      quantity: c.qty,
-      price: c.price,
-      service_id: c.service_id||null,
-    }));
-    await sb.post("order_items", items);
     // Vider le panier
     handleCartChange([]);
     setToast("✅ Commande envoyée !");
