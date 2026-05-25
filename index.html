@@ -1,0 +1,1428 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+<meta name="theme-color" content="#080A0F"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="NexaServe Client"/>
+<meta name="description" content="Commandez en ligne auprès de vos restaurants favoris via NexaServe Client."/>
+<meta property="og:title" content="NexaServe Client"/>
+<meta property="og:description" content="Commandez en ligne auprès de vos restaurants favoris."/>
+<meta property="og:type" content="website"/>
+<title>NexaServe Client — Commandez en ligne</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;overscroll-behavior:none}
+body{background:#080A0F;font-family:'Plus Jakarta Sans',system-ui,sans-serif;overflow-x:hidden;-webkit-font-smoothing:antialiased}
+::-webkit-scrollbar{width:2px}::-webkit-scrollbar-thumb{background:rgba(245,166,35,.3);border-radius:2px}
+input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
+select option{background:#0F1118;color:#F0F2F8}
+input,textarea,select{-webkit-user-select:text;user-select:text;touch-action:manipulation}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+@keyframes slideIn{from{transform:translateX(100%)}to{transform:translateX(0)}}
+@keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}
+@keyframes bounceIn{0%{transform:scale(0.8);opacity:0}60%{transform:scale(1.05)}100%{transform:scale(1);opacity:1}}
+@keyframes toastIn{from{transform:translateY(80px);opacity:0}to{transform:translateY(0);opacity:1}}
+</style>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800;900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+<!-- OneSignal SDK -->
+<script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useEffect, useMemo, useCallback, useRef, useReducer } = React;
+
+// ── ONESIGNAL ──────────────────────────────────────────────────────
+const ONESIGNAL_APP_ID = "d9cb7f25-a664-4046-b721-b2ea6f3f8235";
+const initOneSignal = (clientId) => {
+  try {
+    window.OneSignalDeferred = window.OneSignalDeferred || [];
+    window.OneSignalDeferred.push(async (OneSignal) => {
+      await OneSignal.init({ appId: ONESIGNAL_APP_ID, allowLocalhostAsSecureOrigin: true });
+      if (clientId) {
+        await OneSignal.login(clientId);
+      }
+    });
+  } catch(e) { console.warn("OneSignal init failed", e); }
+};
+
+// ── SUPABASE CONFIG ────────────────────────────────────────────────
+const SB_URL = "https://apqsldtzosodkunftixw.supabase.co";
+const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFwcXNsZHR6b3NvZGt1bmZ0aXh3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc1NjQzMzgsImV4cCI6MjA5MzE0MDMzOH0.NU5q6jRt7LY3FcgwANwXc_ADtp8bPjhpNAkiATcX93o";
+
+const sb = {
+  h: { "Content-Type":"application/json","apikey":SB_KEY,"Authorization":"Bearer "+SB_KEY },
+  async get(table, params="") {
+    const r = await fetch(`${SB_URL}/rest/v1/${table}?${params}`, { headers: this.h });
+    if(!r.ok) throw new Error(await r.text());
+    return r.json();
+  },
+  async post(table, body) {
+    const r = await fetch(`${SB_URL}/rest/v1/${table}`, {
+      method:"POST", headers:{...this.h,"Prefer":"return=representation"}, body:JSON.stringify(body)
+    });
+    if(!r.ok) throw new Error(await r.text());
+    return r.json();
+  },
+  async patch(table, filter, body) {
+    const r = await fetch(`${SB_URL}/rest/v1/${table}?${filter}`, {
+      method:"PATCH", headers:{...this.h,"Prefer":"return=representation"}, body:JSON.stringify(body)
+    });
+    if(!r.ok) throw new Error(await r.text());
+    return r.json();
+  },
+  async rpc(fn, body) {
+    const r = await fetch(`${SB_URL}/rest/v1/rpc/${fn}`, {
+      method:"POST", headers:{...this.h,"Prefer":"return=representation"}, body:JSON.stringify(body)
+    });
+    if(!r.ok) throw new Error(await r.text());
+    return r.json();
+  }
+};
+
+// ── UTILS ──────────────────────────────────────────────────────────
+const uid      = () => crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2)+Date.now().toString(36);
+const fmt      = n  => Math.round(Number(n)||0).toLocaleString("fr-FR")+" GNF";
+const fmtDate  = iso=> { try { return new Date(iso).toLocaleString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"}); } catch(e){return iso;} };
+const fmtShort = iso=> { try { return new Date(iso.includes("T")?iso:iso+"T00:00:00").toLocaleDateString("fr-FR",{day:"2-digit",month:"short",year:"numeric"}); } catch(e){return iso;} };
+
+// Lire ?code= dans l'URL
+const URL_CODE = (() => {
+  try { return new URLSearchParams(window.location.search).get("code") || ""; } catch(e){return "";}
+})();
+
+// ── SESSION ────────────────────────────────────────────────────────
+const SESSION_KEY = "nxsc_session";
+const getSession  = () => { try { const s=localStorage.getItem(SESSION_KEY); return s?JSON.parse(s):null; } catch(e){return null;} };
+const setSession  = s  => { localStorage.setItem(SESSION_KEY,JSON.stringify(s)); };
+const clearSession= ()  => { localStorage.removeItem(SESSION_KEY); };
+
+// Panier persistant par restaurant
+const CART_KEY = (rid) => `nxsc_cart_${rid}`;
+const getCart  = (rid) => { try { const c=localStorage.getItem(CART_KEY(rid)); return c?JSON.parse(c):[]; } catch(e){return [];} };
+const saveCart = (rid,cart) => { localStorage.setItem(CART_KEY(rid),JSON.stringify(cart)); };
+
+// ── STATUTS COMMANDE ───────────────────────────────────────────────
+const STATUTS = {
+  en_attente_validation: { label:"En attente",   color:"#F5A623", bg:"rgba(245,166,35,.15)",  icon:"⏳" },
+  acceptee:              { label:"Acceptée",      color:"#22C55E", bg:"rgba(34,197,94,.15)",   icon:"✅" },
+  en_preparation:        { label:"En préparation",color:"#60a5fa", bg:"rgba(96,165,250,.15)",  icon:"👨‍🍳" },
+  prete:                 { label:"Prête !",        color:"#22C55E", bg:"rgba(34,197,94,.2)",    icon:"🎉" },
+  rejetee:               { label:"Refusée",        color:"#EF4444", bg:"rgba(239,68,68,.15)",   icon:"❌" },
+  livree:                { label:"Récupérée",      color:"#9CA3B0", bg:"rgba(156,163,175,.12)", icon:"📦" },
+};
+
+// ── CSS GLOBAL ─────────────────────────────────────────────────────
+const GLOBAL_CSS = `
+  :root {
+    --bg: #080A0F; --s1: #0F1118; --s2: #171A24; --s3: #1E2230;
+    --gold: #F5A623; --gold2: #D4891A; --goldf: rgba(245,166,35,0.12);
+    --green: #22C55E; --red: #EF4444; --blue: #60a5fa;
+    --t1: #F0F2F8; --t2: #9CA3B0; --t3: #5A6170;
+    --border: rgba(255,255,255,0.07); --border2: rgba(255,255,255,0.12);
+    --radius: 16px;
+  }
+  body { background:var(--bg); color:var(--t1); }
+  h1,h2,h3 { font-family:'Outfit',sans-serif; }
+
+  /* Inputs */
+  .c-inp { width:100%; background:var(--s2); border:1.5px solid var(--border2); border-radius:12px;
+    padding:13px 16px; color:var(--t1); font-size:15px; outline:none; box-sizing:border-box;
+    font-family:'Plus Jakarta Sans',system-ui,sans-serif; transition:border-color .2s; -webkit-appearance:none; }
+  .c-inp:focus { border-color:var(--gold); }
+  .c-inp::placeholder { color:var(--t3); }
+  .c-inp-pr { padding-right:48px; }
+
+  /* Bouton principal */
+  .c-btn { width:100%; background:var(--gold); border:none; border-radius:14px; padding:15px;
+    color:#080A0F; font-weight:800; font-size:15px; cursor:pointer;
+    font-family:'Outfit',sans-serif; transition:background .2s,transform .1s; letter-spacing:0.01em; }
+  .c-btn:active { transform:scale(.98); }
+  .c-btn:disabled { opacity:.5; cursor:not-allowed; }
+  .c-btn-ghost { background:var(--s2); border:1px solid var(--border2); color:var(--t2); }
+  .c-btn-danger { background:rgba(239,68,68,.15); border:1px solid rgba(239,68,68,.3); color:#ef4444; }
+
+  /* Bottom sheet */
+  .sheet-overlay { position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:1000;
+    display:flex;align-items:flex-end;justify-content:center;backdrop-filter:blur(4px); }
+  .sheet { background:var(--s1);border-radius:24px 24px 0 0;width:100%;max-width:500px;
+    max-height:92vh;overflow-y:auto;padding-bottom:env(safe-area-inset-bottom,20px); }
+  .sheet-handle { width:40px;height:4px;background:var(--border2);border-radius:2px;
+    margin:12px auto 0; }
+  .sheet-header { display:flex;align-items:center;justify-content:space-between;
+    padding:16px 20px 14px;border-bottom:1px solid var(--border); }
+  .sheet-title { font-size:18px;font-weight:700;font-family:'Outfit',sans-serif; }
+  .sheet-close { background:var(--s2);border:none;border-radius:10px;padding:7px 12px;
+    cursor:pointer;color:var(--t2);font-size:15px; }
+
+  /* Cards */
+  .c-card { background:var(--s1);border:1px solid var(--border);border-radius:var(--radius);padding:16px; }
+
+  /* Badge */
+  .c-badge { display:inline-flex;align-items:center;gap:4px;
+    padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;white-space:nowrap; }
+
+  /* Loader spinner */
+  .spinner { width:32px;height:32px;border:3px solid rgba(245,166,35,.2);
+    border-top-color:var(--gold);border-radius:50%;animation:spin .8s linear infinite; }
+
+  /* Toast */
+  .toast { position:fixed;bottom:90px;left:50%;transform:translateX(-50%);z-index:9999;
+    background:var(--s3);border:1px solid var(--border2);border-radius:14px;
+    padding:12px 20px;font-size:13px;font-weight:600;color:var(--t1);
+    box-shadow:0 8px 32px rgba(0,0,0,.4);animation:toastIn .3s ease;
+    display:flex;align-items:center;gap:8px;max-width:320px;white-space:nowrap; }
+
+  /* Nav bar */
+  .nav-bar { position:fixed;bottom:0;left:50%;transform:translateX(-50%);
+    width:100%;max-width:500px;background:rgba(8,10,15,.97);
+    border-top:1px solid var(--border);display:flex;
+    padding:8px 0 calc(8px + env(safe-area-inset-bottom,0px));z-index:500;
+    backdrop-filter:blur(20px); }
+  .nav-item { flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;
+    background:none;border:none;cursor:pointer;padding:4px 0;position:relative; }
+  .nav-icon { width:38px;height:38px;border-radius:12px;display:flex;align-items:center;
+    justify-content:center;font-size:18px;transition:background .2s; }
+  .nav-label { font-size:10px;font-weight:600;transition:color .2s; }
+  .nav-badge { position:absolute;top:2px;right:calc(50% - 22px);background:#ef4444;
+    color:#fff;border-radius:10px;font-size:9px;font-weight:800;
+    padding:1px 5px;min-width:16px;text-align:center; }
+
+  /* Menu item card */
+  .menu-card { background:var(--s1);border:1px solid var(--border);border-radius:var(--radius);
+    overflow:hidden;display:flex;flex-direction:column;transition:border-color .2s; }
+  .menu-card:active { border-color:var(--gold); }
+
+  /* Qty pill */
+  .qty-pill { display:flex;align-items:center;gap:0;background:var(--s2);border-radius:12px;overflow:hidden; }
+  .qty-btn { width:36px;height:36px;background:none;border:none;cursor:pointer;
+    color:var(--gold);font-size:18px;font-weight:700;display:flex;align-items:center;justify-content:center; }
+  .qty-val { width:28px;text-align:center;font-weight:700;font-size:14px;color:var(--t1); }
+
+  /* Order status timeline */
+  .timeline { display:flex;flex-direction:column;gap:0; }
+  .tl-step { display:flex;gap:14px;padding:0 0 20px; }
+  .tl-dot { display:flex;flex-direction:column;align-items:center;gap:0;flex-shrink:0;width:28px; }
+  .tl-circle { width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px; }
+  .tl-line { width:2px;flex:1;min-height:16px;background:var(--border);margin-top:4px; }
+  .tl-content { padding-top:4px;flex:1; }
+
+  /* Shimmer skeleton */
+  .shimmer { background:linear-gradient(90deg,var(--s2) 0%,var(--s3) 50%,var(--s2) 100%);
+    background-size:200% 100%;animation:shimmer 1.4s infinite;border-radius:8px; }
+
+  /* Notif dot */
+  .notif-dot { width:8px;height:8px;border-radius:50%;background:#ef4444;
+    position:absolute;top:6px;right:calc(50% - 20px); }
+  
+  /* Scroll snapping for restaurant switcher */
+  .resto-scroll { display:flex;gap:10px;overflow-x:auto;padding:0 20px 4px;
+    scrollbar-width:none;-ms-overflow-style:none; }
+  .resto-scroll::-webkit-scrollbar { display:none; }
+`;
+
+// ── COMPOSANTS UI ──────────────────────────────────────────────────
+
+function Toast({ msg, icon="✓", onDone }) {
+  useEffect(() => { const t = setTimeout(onDone, 2200); return () => clearTimeout(t); }, []);
+  return <div className="toast"><span>{icon}</span>{msg}</div>;
+}
+
+function Spinner({ size=32, color="#F5A623" }) {
+  return <div style={{width:size,height:size,border:`3px solid ${color}33`,borderTopColor:color,borderRadius:"50%",animation:"spin .8s linear infinite"}}/>;
+}
+
+function Loader({ msg="Chargement..." }) {
+  return (
+    <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"60px 0",gap:14}}>
+      <Spinner size={36}/>
+      <div style={{fontSize:13,color:"#5A6170"}}>{msg}</div>
+    </div>
+  );
+}
+
+function Sheet({ title, onClose, children, noPad=false }) {
+  return (
+    <div className="sheet-overlay" onClick={onClose}>
+      <div className="sheet" onClick={e=>e.stopPropagation()}>
+        <div className="sheet-handle"/>
+        <div className="sheet-header">
+          <span className="sheet-title">{title}</span>
+          <button className="sheet-close" onClick={onClose}>✕</button>
+        </div>
+        <div style={noPad?{}:{padding:"18px 20px 8px"}}>{children}</div>
+      </div>
+    </div>
+  );
+}
+
+function Field({ label, children, error }) {
+  return (
+    <div style={{marginBottom:16}}>
+      <label style={{display:"block",fontSize:11,fontWeight:700,color:"#5A6170",marginBottom:7,textTransform:"uppercase",letterSpacing:".6px"}}>{label}</label>
+      {children}
+      {error && <div style={{fontSize:12,color:"#EF4444",marginTop:5}}>{error}</div>}
+    </div>
+  );
+}
+
+function InpEye({ value, onChange, placeholder }) {
+  const [show, setShow] = useState(false);
+  return (
+    <div style={{position:"relative"}}>
+      <input className={`c-inp c-inp-pr`} type={show?"text":"password"} value={value} onChange={onChange} placeholder={placeholder||"••••••••"}/>
+      <button onClick={()=>setShow(s=>!s)} type="button" style={{position:"absolute",right:0,top:0,height:"100%",width:46,background:"none",border:"none",cursor:"pointer",color:"#5A6170",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center"}}>{show?"🙈":"👁"}</button>
+    </div>
+  );
+}
+
+function StatusBadge({ statut }) {
+  const s = STATUTS[statut] || { label:statut, color:"#9CA3B0", bg:"rgba(156,163,175,.12)", icon:"•" };
+  return <span className="c-badge" style={{background:s.bg,color:s.color}}>{s.icon} {s.label}</span>;
+}
+
+function OfflineBanner() {
+  const [offline, setOffline] = useState(!navigator.onLine);
+  useEffect(() => {
+    const on=()=>setOffline(false), off=()=>setOffline(true);
+    window.addEventListener("online",on); window.addEventListener("offline",off);
+    return ()=>{ window.removeEventListener("online",on); window.removeEventListener("offline",off); };
+  },[]);
+  if(!offline) return null;
+  return (
+    <div style={{position:"fixed",top:0,left:0,right:0,zIndex:9999,background:"#dc2626",color:"#fff",textAlign:"center",padding:"8px 16px",fontSize:13,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
+      <span>📵</span> Hors ligne — Vérifiez votre connexion
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// SPLASH SCREEN
+// ═══════════════════════════════════════════════════════════════════
+function SplashScreen({ onDone }) {
+  useEffect(() => { const t = setTimeout(onDone, 1800); return ()=>clearTimeout(t); }, []);
+  return (
+    <div style={{position:"fixed",inset:0,background:"#080A0F",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",zIndex:9999}}>
+      <div style={{animation:"bounceIn .6s ease",textAlign:"center"}}>
+        <div style={{width:90,height:90,borderRadius:28,background:"linear-gradient(135deg,#F5A623,#D4891A)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:44,boxShadow:"0 8px 40px rgba(245,166,35,.4)",marginBottom:22,marginLeft:"auto",marginRight:"auto"}}>🍽</div>
+        <h1 style={{fontFamily:"Outfit,sans-serif",fontSize:32,fontWeight:900,color:"#F5A623",letterSpacing:"-0.5px"}}>NexaServe</h1>
+        <p style={{fontSize:12,color:"#5A6170",letterSpacing:"3px",textTransform:"uppercase",marginTop:6}}>Client</p>
+      </div>
+      <div style={{position:"absolute",bottom:48,display:"flex",flexDirection:"column",alignItems:"center",gap:10}}>
+        <Spinner size={24} color="#F5A623"/>
+        <span style={{fontSize:11,color:"#5A6170"}}>Chargement...</span>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// CSS NXS AUTH — identique aux autres apps NexaServe
+// ═══════════════════════════════════════════════════════════════════
+const NXS_CSS = `
+  @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800;900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap');
+  .nxs-auth { --bg:#080A0F; --s1:#0F1118; --s2:#171A24; --s3:#1E2230;
+    --gold:#F5A623; --gold2:#D4891A; --goldf:rgba(245,166,35,0.12);
+    --green:#22C55E; --red:#EF4444; --t1:#F0F2F8; --t2:#9CA3B0; --t3:#5A6170;
+    --border:rgba(255,255,255,0.07); --border2:rgba(255,255,255,0.12);
+    min-height:100vh; background:var(--bg); color:var(--t1);
+    font-family:'Plus Jakarta Sans',system-ui,sans-serif;
+    display:flex; flex-direction:column; overflow-y:auto; }
+  .nxs-auth h1,h2 { font-family:'Outfit',sans-serif; }
+  .nxs-logo { text-align:center; padding:52px 0 28px; }
+  .nxs-logo h1 { font-size:30px; font-weight:900; color:var(--gold); letter-spacing:-0.5px; margin:0; }
+  .nxs-logo p { font-size:11px; color:var(--t3); margin:5px 0 0; letter-spacing:2.5px; text-transform:uppercase; }
+  .nxs-card { background:var(--s1); border:1px solid var(--border); border-radius:20px; padding:24px; margin:0 20px; }
+  .nxs-card-title { font-size:20px; font-weight:700; margin:0 0 5px; font-family:'Outfit',sans-serif; }
+  .nxs-card-sub { font-size:13px; color:var(--t3); margin:0 0 22px; line-height:1.5; }
+  .nxs-field { margin-bottom:15px; }
+  .nxs-label { display:block; font-size:11px; font-weight:600; color:var(--t3); margin-bottom:7px; text-transform:uppercase; letter-spacing:.6px; }
+  .nxs-inp-wrap { position:relative; }
+  .nxs-inp { width:100%; background:var(--s2); border:1px solid var(--border2); border-radius:10px;
+    padding:12px 14px; color:var(--t1); font-size:16px; outline:none; box-sizing:border-box;
+    font-family:'Plus Jakarta Sans',system-ui,sans-serif; -webkit-appearance:none; transition:border-color .2s;
+    -webkit-user-select:text; user-select:text; touch-action:manipulation; }
+  .nxs-inp:focus { border-color:var(--gold); }
+  .nxs-inp::placeholder { color:var(--t3); }
+  .nxs-inp-pr { padding-right:44px; }
+  .nxs-inp-eye { position:absolute; right:0; top:0; height:100%; width:42px;
+    display:flex; align-items:center; justify-content:center;
+    color:var(--t3); font-size:16px; background:none; border:none; cursor:pointer; }
+  .nxs-error { background:rgba(239,68,68,.1); border:1px solid rgba(239,68,68,.25);
+    border-radius:10px; padding:11px 14px; margin-bottom:14px;
+    color:#EF4444; font-size:13px; font-weight:500; }
+  .nxs-success { background:rgba(34,197,94,.1); border:1px solid rgba(34,197,94,.25);
+    border-radius:10px; padding:11px 14px; margin-bottom:14px;
+    color:#22C55E; font-size:13px; font-weight:500; }
+  .nxs-btn { width:100%; background:var(--gold); border:none; border-radius:10px;
+    padding:14px; color:#080A0F; font-weight:800; font-size:15px;
+    cursor:pointer; font-family:'Outfit',sans-serif; transition:background .2s; margin-bottom:14px; }
+  .nxs-btn:disabled { opacity:.6; cursor:not-allowed; }
+  .nxs-btn:not(:disabled):hover { background:var(--gold2); }
+  .nxs-links { display:flex; gap:10px; justify-content:center; flex-wrap:wrap; }
+  .nxs-link { font-size:13px; color:var(--gold); background:none; border:none; cursor:pointer; padding:0; font-family:inherit; }
+  .nxs-sep { color:var(--t3); font-size:13px; line-height:1; }
+  .nxs-back { display:flex; align-items:center; gap:8px; font-size:13px; color:var(--t3);
+    background:none; border:none; cursor:pointer; margin-bottom:16px; padding:0; font-family:inherit; }
+  .nxs-footer { text-align:center; padding:20px 0 28px; font-size:11px; color:var(--t3); }
+  .nxs-info { background:var(--goldf); border:1px solid rgba(245,166,35,.2);
+    border-radius:10px; padding:12px 14px; margin-bottom:14px; font-size:13px; color:var(--t2); line-height:1.5; }
+  .nxs-tabs { display:flex; margin:0 0 20px; background:var(--s2); border-radius:14px; padding:4px; gap:4px; }
+  .nxs-tab { flex:1; padding:10px; border-radius:10px; border:none; font-weight:700; font-size:13px;
+    cursor:pointer; font-family:'Outfit',sans-serif; transition:background .2s,color .2s; }
+`;
+
+// ⚠️ Défini HORS du composant pour éviter le démontage à chaque frappe
+const NxsField = ({label, children}) => (
+  <div className="nxs-field">
+    <label className="nxs-label">{label}</label>
+    {children}
+  </div>
+);
+
+// Questions secrètes proposées à l'inscription
+const QUESTIONS_SECRETES = [
+  "Quel est le prénom de votre mère ?",
+  "Quel est le nom de votre école primaire ?",
+  "Quel est le nom de votre premier animal de compagnie ?",
+  "Dans quelle ville êtes-vous né(e) ?",
+  "Quel est le surnom de votre meilleur(e) ami(e) d'enfance ?",
+];
+
+// ═══════════════════════════════════════════════════════════════════
+// AUTH — INSCRIPTION / CONNEXION
+// ═══════════════════════════════════════════════════════════════════
+function AuthPage({ onAuth }) {
+  const [step, setStep]     = useState("login"); // login | register | forgot_pass
+  const [loading, setLoading] = useState(false);
+  const [msg, setMsg]       = useState({type:"",text:""});
+
+  // ── Login
+  const [lTel,  setLTel]  = useState("");
+  const [lPass, setLPass] = useState("");
+  const [showLP, setShowLP] = useState(false);
+
+  // ── Register
+  const [rPrenom, setRPrenom] = useState("");
+  const [rNom,    setRNom]    = useState("");
+  const [rTel,    setRTel]    = useState("");
+  const [rPass,   setRPass]   = useState("");
+  const [rPass2,  setRPass2]  = useState("");
+  const [showRP,  setShowRP]  = useState(false);
+  const [rCode,   setRCode]   = useState(URL_CODE || "");
+  const [rQ,      setRQ]      = useState(QUESTIONS_SECRETES[0]);
+  const [rA,      setRA]      = useState("");
+
+  // ── Mot de passe oublié
+  const [fpTel,   setFpTel]   = useState("");
+  const [fpQ,     setFpQ]     = useState("");
+  const [fpA,     setFpA]     = useState("");
+  const [fpNew,   setFpNew]   = useState("");
+  const [fpNew2,  setFpNew2]  = useState("");
+  const [fpClient,setFpClient]= useState(null);
+  const [fpStep,  setFpStep]  = useState(1); // 1=tel, 2=question, 3=nouveau mdp
+
+  const err  = t => setMsg({type:"error",   text:t});
+  const succ = t => setMsg({type:"success",  text:t});
+  const clr  = () => setMsg({type:"",text:""});
+
+  const renderMsg = () => msg.text ? (
+    <div className={msg.type==="error"?"nxs-error":"nxs-success"}>
+      {msg.type==="error"?"⚠️ ":"✓ "}{msg.text}
+    </div>
+  ) : null;
+
+  // ── CONNEXION ──────────────────────────────────────────────────
+  const doLogin = async () => {
+    if(!lTel||!lPass){ err("Téléphone et mot de passe requis."); return; }
+    setLoading(true); clr();
+    try {
+      const rows = await sb.get("clients", `telephone=eq.${encodeURIComponent(lTel.trim())}&select=id,nom,prenom,telephone`);
+      if(!rows?.length){ err("Numéro de téléphone introuvable."); setLoading(false); return; }
+      const client = rows[0];
+      const pwRows = await sb.get("clients", `id=eq.${client.id}&password_hash=eq.${encodeURIComponent(lPass)}&select=id`);
+      if(!pwRows?.length){ err("Mot de passe incorrect."); setLoading(false); return; }
+      const affs = await sb.get("client_affiliations", `client_id=eq.${client.id}&actif=eq.true&select=restaurant_id,affiliated_at`);
+      if(!affs?.length){ err("Aucun restaurant associé. Inscrivez-vous avec un code restaurant."); setLoading(false); return; }
+      const rids = affs.map(a=>a.restaurant_id);
+      const restos = await sb.get("restaurants", `id=in.(${rids.join(",")})&select=id,code,nom,plan,orange_money_numero`);
+      const session = { client, affiliations:affs, restaurants:restos, activeRestaurantId:restos[0]?.id };
+      setSession(session);
+      initOneSignal(client.id);
+      onAuth(session);
+    } catch(e){ err("Erreur de connexion. Vérifiez votre connexion internet."); }
+    setLoading(false);
+  };
+
+  // ── INSCRIPTION ────────────────────────────────────────────────
+  const doRegister = async () => {
+    if(!rPrenom||!rNom||!rTel||!rPass||!rCode||!rA){ err("Tous les champs sont obligatoires."); return; }
+    if(rPass!==rPass2){ err("Les mots de passe ne correspondent pas."); return; }
+    if(rPass.length<4){ err("Mot de passe trop court (min. 4 caractères)."); return; }
+    if(!rCode.trim().toUpperCase().startsWith("NXS")){ err("Code restaurant invalide (format NXS-XXXX)."); return; }
+    setLoading(true); clr();
+    try {
+      const restos = await sb.get("restaurants", `code=eq.${encodeURIComponent(rCode.trim().toUpperCase())}&select=id,nom,plan,statut_abo,date_expiration,orange_money_numero`);
+      if(!restos?.length){ err("Code restaurant introuvable. Vérifiez le code NXS-XXXX."); setLoading(false); return; }
+      const resto = restos[0];
+      const existing = await sb.get("clients", `telephone=eq.${encodeURIComponent(rTel.trim())}&select=id`);
+      if(existing?.length){ err("Ce numéro de téléphone est déjà utilisé."); setLoading(false); return; }
+      const clientBody = {
+        id:uid(), nom:rNom.trim(), prenom:rPrenom.trim(), telephone:rTel.trim(),
+        password_hash:rPass, secret_question:rQ, secret_answer:rA.toLowerCase().trim(),
+        created_at:new Date().toISOString()
+      };
+      const clients = await sb.post("clients", clientBody);
+      const client = clients[0] || clientBody;
+      await sb.post("client_affiliations", { id:uid(), client_id:client.id, restaurant_id:resto.id, affiliated_at:new Date().toISOString(), actif:true });
+      const session = { client, affiliations:[{restaurant_id:resto.id,affiliated_at:new Date().toISOString(),actif:true}], restaurants:[resto], activeRestaurantId:resto.id };
+      setSession(session);
+      initOneSignal(client.id);
+      onAuth(session);
+    } catch(e){ err("Erreur : "+e.message); }
+    setLoading(false);
+  };
+
+  // ── MOT DE PASSE OUBLIÉ — étape 1 : trouver le client par téléphone
+  const fpFind = async () => {
+    if(!fpTel){ err("Numéro de téléphone requis."); return; }
+    setLoading(true); clr();
+    try {
+      const rows = await sb.get("clients", `telephone=eq.${encodeURIComponent(fpTel.trim())}&select=id,nom,prenom,secret_question`);
+      if(!rows?.length){ err("Aucun compte trouvé avec ce numéro."); setLoading(false); return; }
+      const client = rows[0];
+      if(!client.secret_question){ err("Question secrète non configurée pour ce compte."); setLoading(false); return; }
+      setFpClient(client);
+      setFpQ(client.secret_question);
+      setFpStep(2);
+    } catch(e){ err("Erreur réseau."); }
+    setLoading(false);
+  };
+
+  // ── MOT DE PASSE OUBLIÉ — étape 2 : vérifier la réponse secrète
+  const fpVerify = async () => {
+    if(!fpA){ err("Veuillez répondre à la question secrète."); return; }
+    setLoading(true); clr();
+    try {
+      const rows = await sb.get("clients", `id=eq.${encodeURIComponent(fpClient.id)}&select=secret_answer`);
+      const correct = rows?.[0]?.secret_answer || "";
+      if(fpA.toLowerCase().trim() !== correct.toLowerCase().trim()){ err("Réponse incorrecte."); setLoading(false); return; }
+      setFpStep(3);
+    } catch(e){ err("Erreur réseau."); }
+    setLoading(false);
+  };
+
+  // ── MOT DE PASSE OUBLIÉ — étape 3 : nouveau mot de passe
+  const fpReset = async () => {
+    if(!fpNew||fpNew!==fpNew2){ err("Les mots de passe ne correspondent pas."); return; }
+    if(fpNew.length<4){ err("Mot de passe trop court (minimum 4 caractères)."); return; }
+    setLoading(true); clr();
+    try {
+      await sb.patch("clients", `id=eq.${fpClient.id}`, {password_hash:fpNew});
+      succ("Mot de passe réinitialisé avec succès !");
+      setTimeout(()=>{ setStep("login"); setFpStep(1); setFpTel(""); setFpA(""); setFpNew(""); setFpNew2(""); clr(); }, 2000);
+    } catch(e){ err("Erreur lors de la réinitialisation."); }
+    setLoading(false);
+  };
+
+  return (
+    <>
+      <style>{NXS_CSS}</style>
+      <div className="nxs-auth">
+        <OfflineBanner/>
+
+        {/* Logo */}
+        <div className="nxs-logo">
+          <h1>NexaServe</h1>
+          <p>Client</p>
+        </div>
+
+        {/* ── CONNEXION ── */}
+        {step==="login" && (
+          <div className="nxs-card">
+            <h2 className="nxs-card-title">Connexion</h2>
+            <p className="nxs-card-sub">Connectez-vous avec votre numéro de téléphone</p>
+            {renderMsg()}
+            <NxsField label="Numéro de téléphone">
+              <input className="nxs-inp" value={lTel} onChange={e=>{setLTel(e.target.value);clr();}}
+                onKeyDown={e=>e.key==="Enter"&&doLogin()} placeholder="6XX XX XX XX" type="tel" inputMode="tel"/>
+            </NxsField>
+            <NxsField label="Mot de passe">
+              <div className="nxs-inp-wrap">
+                <input className="nxs-inp nxs-inp-pr" type={showLP?"text":"password"} value={lPass}
+                  onChange={e=>{setLPass(e.target.value);clr();}}
+                  onKeyDown={e=>e.key==="Enter"&&doLogin()} placeholder="••••••••"/>
+                <button className="nxs-inp-eye" onClick={()=>setShowLP(s=>!s)} type="button">{showLP?"🙈":"👁️"}</button>
+              </div>
+            </NxsField>
+            <button className="nxs-btn" onClick={doLogin} disabled={loading}>
+              {loading?"Connexion en cours...":"Se connecter"}
+            </button>
+            <div className="nxs-links">
+              <button className="nxs-link" onClick={()=>{setStep("forgot_pass");setFpStep(1);clr();}}>Mot de passe oublié ?</button>
+              <span className="nxs-sep">·</span>
+              <button className="nxs-link" onClick={()=>{setStep("register");clr();}}>Créer un compte</button>
+            </div>
+          </div>
+        )}
+
+        {/* ── INSCRIPTION ── */}
+        {step==="register" && (
+          <div className="nxs-card">
+            <button className="nxs-back" onClick={()=>{setStep("login");clr();}}>← Retour</button>
+            <h2 className="nxs-card-title">Créer un compte</h2>
+            <p className="nxs-card-sub">Inscrivez-vous avec le code de votre restaurant</p>
+            {renderMsg()}
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+              <NxsField label="Prénom">
+                <input className="nxs-inp" value={rPrenom} onChange={e=>{setRPrenom(e.target.value);clr();}} placeholder="Prénom"/>
+              </NxsField>
+              <NxsField label="Nom">
+                <input className="nxs-inp" value={rNom} onChange={e=>{setRNom(e.target.value);clr();}} placeholder="Nom"/>
+              </NxsField>
+            </div>
+            <NxsField label="Numéro de téléphone">
+              <input className="nxs-inp" value={rTel} onChange={e=>{setRTel(e.target.value);clr();}} placeholder="6XX XX XX XX" type="tel" inputMode="tel"/>
+            </NxsField>
+            <NxsField label="Mot de passe">
+              <div className="nxs-inp-wrap">
+                <input className="nxs-inp nxs-inp-pr" type={showRP?"text":"password"} value={rPass}
+                  onChange={e=>{setRPass(e.target.value);clr();}} placeholder="••••••••"/>
+                <button className="nxs-inp-eye" onClick={()=>setShowRP(s=>!s)} type="button">{showRP?"🙈":"👁️"}</button>
+              </div>
+            </NxsField>
+            <NxsField label="Confirmer le mot de passe">
+              <input className="nxs-inp" type="password" value={rPass2} onChange={e=>{setRPass2(e.target.value);clr();}} placeholder="••••••••"/>
+            </NxsField>
+            <NxsField label="Code restaurant (obligatoire)">
+              <input className="nxs-inp" value={rCode} onChange={e=>{setRCode(e.target.value.toUpperCase());clr();}}
+                placeholder="NXS-XXXX" style={{letterSpacing:"0.1em",fontWeight:700}}/>
+            </NxsField>
+            <div className="nxs-info">
+              💡 Le code NXS-XXXX vous est fourni par votre restaurant. Scannez le QR code ou saisissez-le manuellement.
+            </div>
+            {/* Question secrète */}
+            <NxsField label="Question secrète (pour récupérer votre mot de passe)">
+              <select className="nxs-inp" value={rQ} onChange={e=>{setRQ(e.target.value);clr();}} style={{cursor:"pointer"}}>
+                {QUESTIONS_SECRETES.map(q=><option key={q} value={q}>{q}</option>)}
+              </select>
+            </NxsField>
+            <NxsField label="Votre réponse secrète">
+              <input className="nxs-inp" value={rA} onChange={e=>{setRA(e.target.value);clr();}}
+                placeholder="Réponse confidentielle..." autoCapitalize="none" autoCorrect="off"/>
+            </NxsField>
+            <div className="nxs-info" style={{background:"rgba(239,68,68,.07)",borderColor:"rgba(239,68,68,.2)"}}>
+              🔒 Gardez votre réponse secrète en sécurité. Elle servira uniquement à récupérer votre mot de passe.
+            </div>
+            <button className="nxs-btn" onClick={doRegister} disabled={loading}>
+              {loading?"Création du compte...":"Créer mon compte"}
+            </button>
+            <div className="nxs-links">
+              <button className="nxs-link" onClick={()=>{setStep("login");clr();}}>Déjà inscrit ? Se connecter</button>
+            </div>
+          </div>
+        )}
+
+        {/* ── MOT DE PASSE OUBLIÉ ── */}
+        {step==="forgot_pass" && (
+          <div className="nxs-card">
+            <button className="nxs-back" onClick={()=>{setStep("login");clr();}}>← Retour</button>
+            <h2 className="nxs-card-title">Mot de passe oublié</h2>
+            {renderMsg()}
+
+            {fpStep===1 && <>
+              <p className="nxs-card-sub">Saisissez votre numéro de téléphone pour retrouver votre compte.</p>
+              <NxsField label="Numéro de téléphone">
+                <input className="nxs-inp" value={fpTel} onChange={e=>{setFpTel(e.target.value);clr();}}
+                  placeholder="6XX XX XX XX" type="tel" inputMode="tel"/>
+              </NxsField>
+              <button className="nxs-btn" onClick={fpFind} disabled={loading}>{loading?"Recherche...":"Continuer"}</button>
+            </>}
+
+            {fpStep===2 && <>
+              <div className="nxs-info">
+                📋 Bonjour <strong>{fpClient?.prenom} {fpClient?.nom}</strong>. Répondez à votre question secrète.
+              </div>
+              <NxsField label="Question secrète">
+                <input className="nxs-inp" value={fpQ} readOnly style={{color:"#F5A623",fontWeight:600}}/>
+              </NxsField>
+              <NxsField label="Votre réponse">
+                <input className="nxs-inp" value={fpA} onChange={e=>{setFpA(e.target.value);clr();}}
+                  placeholder="Votre réponse..." autoCapitalize="none"/>
+              </NxsField>
+              <button className="nxs-btn" onClick={fpVerify} disabled={loading}>{loading?"Vérification...":"Vérifier"}</button>
+            </>}
+
+            {fpStep===3 && <>
+              <p className="nxs-card-sub">Choisissez un nouveau mot de passe pour <strong style={{color:"#F5A623"}}>{fpClient?.prenom} {fpClient?.nom}</strong>.</p>
+              <NxsField label="Nouveau mot de passe">
+                <input className="nxs-inp" type="password" value={fpNew} onChange={e=>{setFpNew(e.target.value);clr();}} placeholder="••••••••"/>
+              </NxsField>
+              <NxsField label="Confirmer le mot de passe">
+                <input className="nxs-inp" type="password" value={fpNew2} onChange={e=>{setFpNew2(e.target.value);clr();}} placeholder="••••••••"/>
+              </NxsField>
+              <button className="nxs-btn" onClick={fpReset} disabled={loading}>{loading?"Réinitialisation...":"Enregistrer"}</button>
+            </>}
+          </div>
+        )}
+
+        <div className="nxs-footer">© 2026 NexaServe · Réseau privé restauration</div>
+      </div>
+    </>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// AFFILIATION — Ajouter un restaurant
+// ═══════════════════════════════════════════════════════════════════
+function AffiliationSheet({ session, onDone, onClose }) {
+  const [code, setCode]   = useState(URL_CODE||"");
+  const [loading, setLoading] = useState(false);
+  const [msg, setMsg]     = useState({type:"",text:""});
+
+  const doAffiliate = async () => {
+    if(!code.trim()){ setMsg({type:"error",text:"Code restaurant requis."}); return; }
+    setLoading(true); setMsg({type:"",text:""});
+    try {
+      const restos = await sb.get("restaurants", `code=eq.${encodeURIComponent(code.trim().toUpperCase())}&select=id,nom,plan,orange_money_numero`);
+      if(!restos?.length){ setMsg({type:"error",text:"Code restaurant introuvable."}); setLoading(false); return; }
+      const resto = restos[0];
+      // Vérifier si déjà affilié
+      const existing = await sb.get("client_affiliations", `client_id=eq.${session.client.id}&restaurant_id=eq.${resto.id}&select=id,actif`);
+      if(existing?.length) {
+        if(existing[0].actif){ setMsg({type:"error",text:"Vous êtes déjà affilié à ce restaurant."}); setLoading(false); return; }
+        // Réactiver
+        await sb.patch("client_affiliations",`id=eq.${existing[0].id}`,{actif:true});
+      } else {
+        await sb.post("client_affiliations",{id:uid(),client_id:session.client.id,restaurant_id:resto.id,affiliated_at:new Date().toISOString(),actif:true});
+      }
+      onDone(resto);
+    } catch(e){ setMsg({type:"error",text:e.message}); }
+    setLoading(false);
+  };
+
+  return (
+    <Sheet title="Rejoindre un restaurant" onClose={onClose}>
+      {msg.text && <div style={{background:msg.type==="error"?"rgba(239,68,68,.1)":"rgba(34,197,94,.1)",border:`1px solid ${msg.type==="error"?"rgba(239,68,68,.3)":"rgba(34,197,94,.3)"}`,borderRadius:12,padding:"10px 14px",marginBottom:14,color:msg.type==="error"?"#EF4444":"#22C55E",fontSize:13}}>{msg.text}</div>}
+      <Field label="Code restaurant">
+        <input className="c-inp" value={code} onChange={e=>setCode(e.target.value.toUpperCase())} placeholder="NXS-XXXX" style={{letterSpacing:"0.1em",fontWeight:700}}/>
+      </Field>
+      <div style={{marginBottom:14}}>
+        <button className="c-btn" onClick={doAffiliate} disabled={loading}>{loading?"Recherche...":"S'affilier"}</button>
+      </div>
+      <button className="c-btn c-btn-ghost" onClick={onClose}>Annuler</button>
+    </Sheet>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// MENU SCREEN
+// ═══════════════════════════════════════════════════════════════════
+function MenuScreen({ session, cart, onCartChange, onOpenCart }) {
+  const [menu, setMenu]      = useState([]);
+  const [categories, setCats] = useState([]);
+  const [selCat, setSelCat]  = useState("all");
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch]  = useState("");
+  const [resto, setResto]    = useState(null);
+
+  const rid = session.activeRestaurantId;
+
+  useEffect(() => {
+    if(!rid) return;
+    setLoading(true);
+    const r = session.restaurants?.find(r=>r.id===rid);
+    setResto(r);
+    // Charger le menu (table menu_items ou products selon l'existant)
+    sb.get("menu_items", `restaurant_id=eq.${encodeURIComponent(rid)}&available=eq.true&order=category.asc,name.asc`)
+      .then(items => {
+        setMenu(items||[]);
+        const cats = [...new Set((items||[]).map(i=>i.category).filter(Boolean))];
+        setCats(cats);
+        setLoading(false);
+      })
+      .catch(() => {
+        // Fallback sur table 'products'
+        sb.get("products", `restaurant_id=eq.${encodeURIComponent(rid)}&actif=eq.true&order=categorie.asc,nom.asc`)
+          .then(items => {
+            // Normaliser
+            const normalized = (items||[]).map(p=>({id:p.id,name:p.nom,description:p.description,price:p.prix,category:p.categorie,image_url:p.image_url,service_id:p.service_id,available:p.actif}));
+            setMenu(normalized);
+            const cats = [...new Set(normalized.map(i=>i.category).filter(Boolean))];
+            setCats(cats);
+            setLoading(false);
+          })
+          .catch(()=>setLoading(false));
+      });
+  }, [rid]);
+
+  const filtered = useMemo(() => menu.filter(item => {
+    const matchCat = selCat==="all" || item.category===selCat;
+    const matchSearch = !search || (item.name||"").toLowerCase().includes(search.toLowerCase());
+    return matchCat && matchSearch;
+  }), [menu,selCat,search]);
+
+  const cartCount = cart.reduce((s,i)=>s+i.qty,0);
+  const cartTotal = cart.reduce((s,i)=>s+i.qty*i.price,0);
+
+  const getQty = (id) => cart.find(c=>c.id===id)?.qty || 0;
+
+  const changeQty = (item, delta) => {
+    const cur = cart.find(c=>c.id===item.id);
+    const newQty = (cur?.qty||0)+delta;
+    let newCart;
+    if(newQty<=0) newCart = cart.filter(c=>c.id!==item.id);
+    else if(cur) newCart = cart.map(c=>c.id===item.id?{...c,qty:newQty}:c);
+    else newCart = [...cart,{id:item.id,name:item.name,price:item.price,qty:1,service_id:item.service_id,category:item.category}];
+    onCartChange(newCart);
+  };
+
+  return (
+    <div style={{paddingBottom:140}}>
+      {/* Restaurant header */}
+      <div style={{background:"linear-gradient(180deg,rgba(245,166,35,.12) 0%,transparent 100%)",padding:"16px 20px 0",borderBottom:"1px solid rgba(255,255,255,.06)"}}>
+        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
+          <div style={{width:44,height:44,borderRadius:14,background:"linear-gradient(135deg,#F5A623,#D4891A)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>🍽</div>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontFamily:"Outfit,sans-serif",fontWeight:800,fontSize:18,color:"#F0F2F8",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{resto?.nom||"Restaurant"}</div>
+            <div style={{fontSize:11,color:"#5A6170",marginTop:1}}>Menu en ligne</div>
+          </div>
+        </div>
+        {/* Search */}
+        <div style={{position:"relative",marginBottom:14}}>
+          <span style={{position:"absolute",left:14,top:"50%",transform:"translateY(-50%)",color:"#5A6170",fontSize:15}}>🔍</span>
+          <input className="c-inp" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Rechercher un plat..." style={{paddingLeft:40,paddingTop:10,paddingBottom:10,fontSize:14}}/>
+        </div>
+        {/* Catégories */}
+        {categories.length>0 && (
+          <div className="resto-scroll" style={{margin:"0 -20px",padding:"0 20px 14px"}}>
+            {[{id:"all",l:"Tout"},...categories.map(c=>({id:c,l:c}))].map(cat=>(
+              <button key={cat.id} onClick={()=>setSelCat(cat.id)} style={{flexShrink:0,padding:"7px 16px",borderRadius:20,border:selCat===cat.id?"none":"1px solid rgba(255,255,255,.1)",background:selCat===cat.id?"#F5A623":"rgba(255,255,255,.05)",color:selCat===cat.id?"#080A0F":"#9CA3B0",fontWeight:700,fontSize:12,cursor:"pointer",whiteSpace:"nowrap",transition:"all .2s"}}>
+                {cat.l}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Menu items */}
+      <div style={{padding:"16px 16px 0"}}>
+        {loading && <Loader msg="Chargement du menu..."/>}
+        {!loading && filtered.length===0 && (
+          <div style={{textAlign:"center",padding:"48px 20px",color:"#5A6170",fontSize:14}}>
+            {search?"Aucun résultat pour \""+search+"\"":"Aucun article disponible"}
+          </div>
+        )}
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+          {filtered.map(item => {
+            const qty = getQty(item.id);
+            return (
+              <div key={item.id} className="menu-card" style={{animation:"fadeUp .3s ease"}}>
+                {item.image_url ? (
+                  <div style={{width:"100%",aspectRatio:"4/3",background:"#171A24",overflow:"hidden"}}>
+                    <img src={item.image_url} alt={item.name} style={{width:"100%",height:"100%",objectFit:"cover"}} onError={e=>e.target.style.display="none"}/>
+                  </div>
+                ) : (
+                  <div style={{width:"100%",aspectRatio:"4/3",background:"linear-gradient(135deg,#171A24,#1E2230)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:32}}>🍴</div>
+                )}
+                <div style={{padding:"10px 10px 12px",flex:1,display:"flex",flexDirection:"column",gap:4}}>
+                  <div style={{fontWeight:700,fontSize:13,color:"#F0F2F8",lineHeight:1.3}}>{item.name}</div>
+                  {item.description && <div style={{fontSize:11,color:"#5A6170",lineHeight:1.4,flex:1}}>{item.description.slice(0,60)}{item.description.length>60?"…":""}</div>}
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:6}}>
+                    <span style={{fontFamily:"Outfit,sans-serif",fontWeight:800,fontSize:13,color:"#F5A623"}}>{fmt(item.price)}</span>
+                    {qty===0 ? (
+                      <button onClick={()=>changeQty(item,1)} style={{width:32,height:32,borderRadius:10,background:"#F5A623",border:"none",cursor:"pointer",color:"#080A0F",fontWeight:800,fontSize:18,display:"flex",alignItems:"center",justifyContent:"center"}}>+</button>
+                    ) : (
+                      <div className="qty-pill">
+                        <button className="qty-btn" onClick={()=>changeQty(item,-1)}>−</button>
+                        <span className="qty-val">{qty}</span>
+                        <button className="qty-btn" onClick={()=>changeQty(item,1)}>+</button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Panier flottant */}
+      {cartCount>0 && (
+        <div style={{position:"fixed",bottom:72,left:"50%",transform:"translateX(-50%)",width:"calc(100% - 32px)",maxWidth:468,zIndex:400,animation:"fadeUp .3s ease"}}>
+          <button onClick={onOpenCart} style={{width:"100%",background:"linear-gradient(135deg,#F5A623,#D4891A)",border:"none",borderRadius:16,padding:"14px 20px",display:"flex",alignItems:"center",justifyContent:"space-between",cursor:"pointer",boxShadow:"0 8px 32px rgba(245,166,35,.4)"}}>
+            <div style={{display:"flex",alignItems:"center",gap:10}}>
+              <span style={{background:"rgba(0,0,0,.2)",borderRadius:8,padding:"4px 9px",fontWeight:800,fontSize:13,color:"#fff"}}>{cartCount}</span>
+              <span style={{fontWeight:700,fontSize:14,color:"#080A0F",fontFamily:"Outfit,sans-serif"}}>Voir le panier</span>
+            </div>
+            <span style={{fontWeight:800,fontSize:14,color:"#080A0F",fontFamily:"Outfit,sans-serif"}}>{fmt(cartTotal)}</span>
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// PANIER
+// ═══════════════════════════════════════════════════════════════════
+function CartSheet({ session, cart, onCartChange, onClose, onOrder }) {
+  const total = cart.reduce((s,i)=>s+i.qty*i.price,0);
+  const [mode, setMode]   = useState("sur_place"); // sur_place | orange_money
+  const [loading, setLoading] = useState(false);
+  const resto = session.restaurants?.find(r=>r.id===session.activeRestaurantId);
+
+  const changeQty = (id, delta) => {
+    const newCart = cart.map(c=>c.id===id?{...c,qty:Math.max(0,c.qty+delta)}:c).filter(c=>c.qty>0);
+    onCartChange(newCart);
+  };
+
+  const doOrder = async () => {
+    if(!cart.length) return;
+    setLoading(true);
+    try {
+      await onOrder({ cart, mode, total });
+      onClose();
+    } catch(e){ alert("Erreur : "+e.message); }
+    setLoading(false);
+  };
+
+  return (
+    <Sheet title="🛒 Mon panier" onClose={onClose}>
+      {cart.length===0 ? (
+        <div style={{textAlign:"center",padding:"32px 0",color:"#5A6170"}}>
+          <div style={{fontSize:40,marginBottom:12}}>🛒</div>
+          <div>Votre panier est vide</div>
+        </div>
+      ) : (
+        <>
+          <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:20}}>
+            {cart.map(item=>(
+              <div key={item.id} style={{display:"flex",alignItems:"center",gap:12,background:"#171A24",borderRadius:12,padding:"12px 14px"}}>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontWeight:700,fontSize:14,color:"#F0F2F8"}}>{item.name}</div>
+                  <div style={{fontSize:12,color:"#F5A623",fontWeight:700,marginTop:2}}>{fmt(item.price)}</div>
+                </div>
+                <div className="qty-pill">
+                  <button className="qty-btn" onClick={()=>changeQty(item.id,-1)}>−</button>
+                  <span className="qty-val">{item.qty}</span>
+                  <button className="qty-btn" onClick={()=>changeQty(item.id,1)}>+</button>
+                </div>
+                <div style={{fontWeight:800,fontSize:13,color:"#F0F2F8",minWidth:70,textAlign:"right"}}>{fmt(item.qty*item.price)}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Total */}
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",background:"rgba(245,166,35,.08)",border:"1px solid rgba(245,166,35,.2)",borderRadius:12,padding:"14px 16px",marginBottom:20}}>
+            <span style={{fontWeight:700,color:"#9CA3B0"}}>Total</span>
+            <span style={{fontFamily:"Outfit,sans-serif",fontWeight:900,fontSize:20,color:"#F5A623"}}>{fmt(total)}</span>
+          </div>
+
+          {/* Mode paiement */}
+          <div style={{marginBottom:20}}>
+            <div style={{fontSize:11,fontWeight:700,color:"#5A6170",textTransform:"uppercase",letterSpacing:".6px",marginBottom:10}}>Mode de paiement</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+              {[{id:"sur_place",icon:"💵",label:"Sur place"},{id:"orange_money",icon:"📱",label:"Orange Money"}].map(m=>(
+                <button key={m.id} onClick={()=>setMode(m.id)} style={{padding:"14px 10px",borderRadius:14,border:mode===m.id?"2px solid #F5A623":"1px solid rgba(255,255,255,.1)",background:mode===m.id?"rgba(245,166,35,.12)":"rgba(255,255,255,.04)",color:mode===m.id?"#F5A623":"#9CA3B0",fontWeight:700,fontSize:13,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:6,transition:"all .2s"}}>
+                  <span style={{fontSize:22}}>{m.icon}</span>
+                  {m.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Orange Money info */}
+          {mode==="orange_money" && resto?.orange_money_numero && (
+            <div style={{background:"rgba(255,140,0,.08)",border:"1px solid rgba(255,140,0,.25)",borderRadius:14,padding:"14px 16px",marginBottom:20}}>
+              <div style={{fontWeight:700,color:"#F5A623",marginBottom:8,fontSize:14}}>📱 Envoyez le montant exact</div>
+              <div style={{fontSize:13,color:"#9CA3B0",lineHeight:1.7}}>
+                Numéro Orange Money :<br/>
+                <strong style={{color:"#F0F2F8",fontSize:20,fontFamily:"Outfit,sans-serif",letterSpacing:"0.05em"}}>{resto.orange_money_numero}</strong><br/>
+                <strong style={{color:"#F5A623"}}>{fmt(total)}</strong><br/>
+                <span style={{fontSize:12,color:"#5A6170"}}>Votre commande sera validée après confirmation du paiement.</span>
+              </div>
+            </div>
+          )}
+
+          <button className="c-btn" onClick={doOrder} disabled={loading}>
+            {loading?"Envoi en cours...":"✅ Commander — "+fmt(total)}
+          </button>
+        </>
+      )}
+    </Sheet>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// SUIVI COMMANDE
+// ═══════════════════════════════════════════════════════════════════
+function OrderTracker({ orderId, onClose }) {
+  const [order, setOrder] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    try {
+      const rows = await sb.get("orders", `id=eq.${orderId}&select=id,statut,total,created_at,motif_rejet,client_nom,mode_paiement_client,order_items(name,quantity,price)`);
+      if(rows?.length) setOrder(rows[0]);
+    } catch(e){}
+    setLoading(false);
+  }, [orderId]);
+
+  useEffect(() => {
+    load();
+    // Polling toutes les 12 secondes
+    const interval = setInterval(load, 12000);
+    return () => clearInterval(interval);
+  }, [load]);
+
+  const STEPS = [
+    {id:"en_attente_validation",label:"En attente de validation",icon:"⏳"},
+    {id:"acceptee",label:"Commande acceptée",icon:"✅"},
+    {id:"en_preparation",label:"En préparation",icon:"👨‍🍳"},
+    {id:"prete",label:"Commande prête !",icon:"🎉"},
+  ];
+
+  const statutIdx = order ? STEPS.findIndex(s=>s.id===order.statut) : -1;
+  const isRejetee = order?.statut==="rejetee";
+
+  return (
+    <Sheet title="Suivi commande" onClose={onClose}>
+      {loading && <Loader msg="Chargement..."/>}
+      {!loading && order && (
+        <>
+          <div style={{background:"#171A24",borderRadius:14,padding:"14px 16px",marginBottom:20}}>
+            <div style={{fontSize:11,color:"#5A6170",marginBottom:4}}>Commande #{order.id?.slice(-6).toUpperCase()}</div>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <StatusBadge statut={order.statut}/>
+              <span style={{fontFamily:"Outfit,sans-serif",fontWeight:800,fontSize:17,color:"#F5A623"}}>{fmt(order.total)}</span>
+            </div>
+          </div>
+
+          {isRejetee ? (
+            <div style={{background:"rgba(239,68,68,.08)",border:"1px solid rgba(239,68,68,.25)",borderRadius:14,padding:"14px 16px",marginBottom:20}}>
+              <div style={{fontWeight:700,color:"#EF4444",marginBottom:4}}>❌ Commande refusée</div>
+              {order.motif_rejet && <div style={{fontSize:13,color:"#9CA3B0"}}>{order.motif_rejet}</div>}
+            </div>
+          ) : (
+            <div className="timeline" style={{marginBottom:20,paddingLeft:4}}>
+              {STEPS.map((step,i)=>{
+                const done   = statutIdx > i;
+                const active = statutIdx === i;
+                const future = statutIdx < i;
+                return (
+                  <div key={step.id} className="tl-step">
+                    <div className="tl-dot">
+                      <div className="tl-circle" style={{background:done?"#22C55E":active?"#F5A623":"rgba(255,255,255,.08)",color:done||active?"#fff":"#5A6170",boxShadow:active?"0 0 12px rgba(245,166,35,.4)":"none",transition:"all .4s"}}>
+                        {done?"✓":step.icon}
+                      </div>
+                      {i<STEPS.length-1 && <div className="tl-line" style={{background:done?"#22C55E33":"rgba(255,255,255,.08)"}}/>}
+                    </div>
+                    <div className="tl-content">
+                      <div style={{fontWeight:active?700:500,color:future?"#5A6170":done?"#22C55E":active?"#F5A623":"#F0F2F8",fontSize:14,transition:"color .3s"}}>{step.label}</div>
+                      {active && <div style={{fontSize:11,color:"#9CA3B0",marginTop:2,animation:"pulse 2s infinite"}}>En cours...</div>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Détail articles */}
+          {order.order_items?.length>0 && (
+            <div style={{marginBottom:16}}>
+              <div style={{fontSize:12,fontWeight:700,color:"#5A6170",textTransform:"uppercase",letterSpacing:".5px",marginBottom:10}}>Articles commandés</div>
+              {order.order_items.map((item,i)=>(
+                <div key={i} style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid rgba(255,255,255,.05)"}}>
+                  <span style={{fontSize:13,color:"#9CA3B0"}}>{item.quantity}× {item.name}</span>
+                  <span style={{fontSize:13,fontWeight:700,color:"#F0F2F8"}}>{fmt((item.price||0)*item.quantity)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </Sheet>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// HISTORIQUE DES COMMANDES
+// ═══════════════════════════════════════════════════════════════════
+function HistoriqueScreen({ session }) {
+  const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [tracked, setTracked] = useState(null);
+
+  const rid = session.activeRestaurantId;
+
+  useEffect(()=>{
+    setLoading(true);
+    sb.get("orders",`restaurant_id=eq.${encodeURIComponent(rid)}&client_id=eq.${encodeURIComponent(session.client.id)}&order=created_at.desc&limit=50&select=id,statut,total,created_at,motif_rejet,mode_paiement_client`)
+      .then(r=>{ setOrders(r||[]); setLoading(false); })
+      .catch(()=>setLoading(false));
+  },[rid,session.client.id]);
+
+  return (
+    <div style={{padding:"20px 16px",paddingBottom:100}}>
+      <h2 style={{fontFamily:"Outfit,sans-serif",fontSize:22,fontWeight:800,marginBottom:20,color:"#F0F2F8"}}>Mes commandes</h2>
+      {loading && <Loader/>}
+      {!loading && orders.length===0 && (
+        <div style={{textAlign:"center",padding:"48px 20px",color:"#5A6170"}}>
+          <div style={{fontSize:44,marginBottom:12}}>📋</div>
+          <div style={{fontSize:15,fontWeight:600,marginBottom:6}}>Aucune commande</div>
+          <div style={{fontSize:13}}>Vos commandes apparaîtront ici</div>
+        </div>
+      )}
+      <div style={{display:"flex",flexDirection:"column",gap:12}}>
+        {orders.map(o=>(
+          <div key={o.id} onClick={()=>setTracked(o.id)} className="c-card" style={{cursor:"pointer",transition:"border-color .2s",animation:"fadeUp .3s ease"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
+              <div>
+                <div style={{fontWeight:700,fontSize:14,color:"#F0F2F8"}}>Commande #{o.id?.slice(-6).toUpperCase()}</div>
+                <div style={{fontSize:11,color:"#5A6170",marginTop:3}}>{fmtDate(o.created_at)}</div>
+              </div>
+              <span style={{fontFamily:"Outfit,sans-serif",fontWeight:800,color:"#F5A623",fontSize:15}}>{fmt(o.total)}</span>
+            </div>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <StatusBadge statut={o.statut}/>
+              <span style={{fontSize:11,color:"#5A6170"}}>{o.mode_paiement_client==="orange_money"?"📱 Orange Money":"💵 Sur place"}</span>
+            </div>
+            {o.motif_rejet && <div style={{marginTop:10,fontSize:12,color:"#EF4444",background:"rgba(239,68,68,.08)",borderRadius:8,padding:"6px 10px"}}>Motif : {o.motif_rejet}</div>}
+          </div>
+        ))}
+      </div>
+      {tracked && <OrderTracker orderId={tracked} onClose={()=>setTracked(null)}/>}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// NOTIFICATIONS
+// ═══════════════════════════════════════════════════════════════════
+function NotificationsScreen({ session }) {
+  const [notifs, setNotifs] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(()=>{
+    sb.get("client_notifications",`client_id=eq.${encodeURIComponent(session.client.id)}&order=created_at.desc&limit=50`)
+      .then(r=>{ setNotifs(r||[]); setLoading(false); })
+      .catch(()=>{ setNotifs([]); setLoading(false); });
+  },[session.client.id]);
+
+  return (
+    <div style={{padding:"20px 16px",paddingBottom:100}}>
+      <h2 style={{fontFamily:"Outfit,sans-serif",fontSize:22,fontWeight:800,marginBottom:20,color:"#F0F2F8"}}>Notifications</h2>
+      {loading && <Loader/>}
+      {!loading && notifs.length===0 && (
+        <div style={{textAlign:"center",padding:"48px 20px",color:"#5A6170"}}>
+          <div style={{fontSize:44,marginBottom:12}}>🔔</div>
+          <div style={{fontSize:15,fontWeight:600,marginBottom:6}}>Aucune notification</div>
+          <div style={{fontSize:13}}>Vous serez notifié ici lorsque vos commandes changent de statut</div>
+        </div>
+      )}
+      <div style={{display:"flex",flexDirection:"column",gap:10}}>
+        {notifs.map(n=>(
+          <div key={n.id} className="c-card" style={{borderColor:n.lu?"rgba(255,255,255,.07)":"rgba(245,166,35,.3)",background:n.lu?"#0F1118":"rgba(245,166,35,.05)"}}>
+            <div style={{display:"flex",gap:12,alignItems:"flex-start"}}>
+              <span style={{fontSize:22,flexShrink:0}}>{n.icon||"🔔"}</span>
+              <div style={{flex:1}}>
+                <div style={{fontWeight:n.lu?500:700,fontSize:14,color:"#F0F2F8",marginBottom:3}}>{n.titre||n.message}</div>
+                {n.corps && <div style={{fontSize:12,color:"#9CA3B0",lineHeight:1.5}}>{n.corps}</div>}
+                <div style={{fontSize:11,color:"#5A6170",marginTop:6}}>{fmtDate(n.created_at)}</div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// PROFIL
+// ═══════════════════════════════════════════════════════════════════
+function ProfilScreen({ session, onLogout, onSessionUpdate }) {
+  const { client, restaurants, affiliations } = session;
+  const [showAffiliate, setShowAffiliate] = useState(false);
+  const [toast, setToast] = useState(null);
+
+  const nomComplet = `${client.prenom||""} ${client.nom||""}`.trim();
+
+  const handleNewAffi = (resto) => {
+    const newSession = {
+      ...session,
+      affiliations:[...affiliations,{restaurant_id:resto.id,affiliated_at:new Date().toISOString(),actif:true}],
+      restaurants:[...(restaurants||[]),resto]
+    };
+    setSession(newSession);
+    onSessionUpdate(newSession);
+    setShowAffiliate(false);
+    setToast("Affilié à "+resto.nom+" !");
+  };
+
+  return (
+    <div style={{padding:"20px 16px",paddingBottom:100}}>
+      <h2 style={{fontFamily:"Outfit,sans-serif",fontSize:22,fontWeight:800,marginBottom:20,color:"#F0F2F8"}}>Mon profil</h2>
+
+      {/* Avatar + Infos */}
+      <div style={{background:"linear-gradient(135deg,rgba(245,166,35,.15),rgba(245,166,35,.05))",border:"1px solid rgba(245,166,35,.2)",borderRadius:20,padding:"22px",marginBottom:20,textAlign:"center"}}>
+        <div style={{width:72,height:72,borderRadius:22,background:"linear-gradient(135deg,#F5A623,#D4891A)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:32,margin:"0 auto 14px",boxShadow:"0 4px 20px rgba(245,166,35,.3)"}}>
+          {(client.prenom||"U").charAt(0).toUpperCase()}
+        </div>
+        <div style={{fontFamily:"Outfit,sans-serif",fontWeight:800,fontSize:20,color:"#F0F2F8"}}>{nomComplet}</div>
+        <div style={{fontSize:13,color:"#9CA3B0",marginTop:5}}>📞 {client.telephone}</div>
+      </div>
+
+      {/* Mes restaurants */}
+      <div style={{marginBottom:20}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+          <div style={{fontFamily:"Outfit,sans-serif",fontWeight:700,fontSize:16,color:"#F0F2F8"}}>🍽 Mes restaurants</div>
+          <button onClick={()=>setShowAffiliate(true)} style={{background:"rgba(245,166,35,.12)",border:"1px solid rgba(245,166,35,.25)",borderRadius:10,padding:"6px 12px",cursor:"pointer",color:"#F5A623",fontWeight:700,fontSize:12}}>+ Ajouter</button>
+        </div>
+        <div style={{display:"flex",flexDirection:"column",gap:10}}>
+          {(restaurants||[]).map(r=>(
+            <div key={r.id} className="c-card" style={{display:"flex",alignItems:"center",gap:12}}>
+              <div style={{width:44,height:44,borderRadius:14,background:"linear-gradient(135deg,#F5A623,#D4891A)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>🍽</div>
+              <div style={{flex:1}}>
+                <div style={{fontWeight:700,color:"#F0F2F8",fontSize:14}}>{r.nom}</div>
+                <div style={{fontSize:11,color:"#5A6170",marginTop:2}}>Code : {r.code}</div>
+              </div>
+              {r.id===session.activeRestaurantId && <span className="c-badge" style={{background:"rgba(34,197,94,.15)",color:"#22C55E"}}>Actif</span>}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Déconnexion */}
+      <button className="c-btn c-btn-danger" onClick={onLogout} style={{width:"100%",padding:"14px",borderRadius:14,fontWeight:700,fontSize:14,cursor:"pointer",fontFamily:"Outfit,sans-serif"}}>
+        🚪 Se déconnecter
+      </button>
+
+      {showAffiliate && <AffiliationSheet session={session} onDone={handleNewAffi} onClose={()=>setShowAffiliate(false)}/>}
+      {toast && <Toast msg={toast} icon="✅" onDone={()=>setToast(null)}/>}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// RESTAURANT SWITCHER (header bar)
+// ═══════════════════════════════════════════════════════════════════
+function RestaurantSwitcher({ session, onSwitch }) {
+  const { restaurants=[], activeRestaurantId } = session;
+  if(restaurants.length<=1) return null;
+  return (
+    <div className="resto-scroll" style={{background:"#080A0F",borderBottom:"1px solid rgba(255,255,255,.06)",paddingTop:10,paddingBottom:10}}>
+      {restaurants.map(r=>(
+        <button key={r.id} onClick={()=>onSwitch(r.id)} style={{flexShrink:0,padding:"8px 16px",borderRadius:20,border:r.id===activeRestaurantId?"2px solid #F5A623":"1px solid rgba(255,255,255,.1)",background:r.id===activeRestaurantId?"rgba(245,166,35,.12)":"rgba(255,255,255,.05)",color:r.id===activeRestaurantId?"#F5A623":"#9CA3B0",fontWeight:700,fontSize:12,cursor:"pointer",whiteSpace:"nowrap",transition:"all .2s"}}>
+          🍽 {r.nom}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// APP PRINCIPALE
+// ═══════════════════════════════════════════════════════════════════
+function MainApp({ session: initialSession, onLogout }) {
+  const [session, setSessionState] = useState(initialSession);
+  const [tab, setTab]   = useState("menu");
+  const [cart, setCart] = useState(() => getCart(initialSession.activeRestaurantId));
+  const [showCart, setShowCart] = useState(false);
+  const [tracked, setTracked]   = useState(null);
+  const [toast, setToast]        = useState(null);
+  const [notifCount, setNotifCount] = useState(0);
+
+  const rid = session.activeRestaurantId;
+
+  // Recharger panier quand restaurant change
+  const handleSwitch = (newRid) => {
+    saveCart(rid, cart);
+    const newSession = { ...session, activeRestaurantId: newRid };
+    setSession(newSession);
+    setSessionState(newSession);
+    setCart(getCart(newRid));
+    setTab("menu");
+  };
+
+  const handleSessionUpdate = (newSession) => {
+    setSessionState(newSession);
+  };
+
+  const handleCartChange = (newCart) => {
+    setCart(newCart);
+    saveCart(rid, newCart);
+  };
+
+  const handleOrder = async ({ cart, mode, total }) => {
+    const client = session.client;
+    const nomComplet = `${client.prenom||""} ${client.nom||""}`.trim();
+    // Créer la commande dans la table orders
+    const orderBody = {
+      id: uid(),
+      restaurant_id: rid,
+      type: "emporter",
+      statut: "en_attente_validation",
+      total: total,
+      client_id: client.id,
+      is_client_order: true,
+      client_nom: nomComplet,
+      client_telephone: client.telephone,
+      mode_paiement_client: mode,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    // Insérer la commande
+    const orderRows = await sb.post("orders", orderBody);
+    const orderId = orderRows?.[0]?.id || orderBody.id;
+    // Insérer les articles
+    const items = cart.map(c=>({
+      id: uid(),
+      order_id: orderId,
+      restaurant_id: rid,
+      name: c.name,
+      quantity: c.qty,
+      price: c.price,
+      service_id: c.service_id||null,
+    }));
+    await sb.post("order_items", items);
+    // Vider le panier
+    handleCartChange([]);
+    setToast("✅ Commande envoyée !");
+    setTracked(orderId);
+    setTab("historique");
+  };
+
+  // Compter les notifs non lues
+  useEffect(()=>{
+    sb.get("client_notifications",`client_id=eq.${encodeURIComponent(session.client.id)}&lu=eq.false&select=id`)
+      .then(r=>setNotifCount(r?.length||0))
+      .catch(()=>{});
+    const i = setInterval(()=>{
+      sb.get("client_notifications",`client_id=eq.${encodeURIComponent(session.client.id)}&lu=eq.false&select=id`)
+        .then(r=>setNotifCount(r?.length||0)).catch(()=>{});
+    },30000);
+    return ()=>clearInterval(i);
+  },[session.client.id]);
+
+  const cartCount = cart.reduce((s,i)=>s+i.qty,0);
+
+  const TABS = [
+    { id:"menu",       icon:"🍽",  label:"Menu"          },
+    { id:"historique", icon:"📋",  label:"Commandes"     },
+    { id:"notifs",     icon:"🔔",  label:"Notifs",  badge:notifCount },
+    { id:"profil",     icon:"👤",  label:"Profil"        },
+  ];
+
+  return (
+    <div style={{maxWidth:500,margin:"0 auto",minHeight:"100vh",background:"#080A0F",display:"flex",flexDirection:"column",position:"relative"}}>
+      <style>{GLOBAL_CSS}</style>
+      <OfflineBanner/>
+
+      {/* Restaurant switcher si plusieurs */}
+      {session.restaurants?.length>1 && (
+        <RestaurantSwitcher session={session} onSwitch={handleSwitch}/>
+      )}
+
+      {/* Contenu */}
+      <div style={{flex:1,overflowY:"auto",paddingTop:4}}>
+        {tab==="menu"       && <MenuScreen session={session} cart={cart} onCartChange={handleCartChange} onOpenCart={()=>setShowCart(true)}/>}
+        {tab==="historique" && <HistoriqueScreen session={session}/>}
+        {tab==="notifs"     && <NotificationsScreen session={session}/>}
+        {tab==="profil"     && <ProfilScreen session={session} onLogout={onLogout} onSessionUpdate={handleSessionUpdate}/>}
+      </div>
+
+      {/* Nav bar */}
+      <nav className="nav-bar">
+        {TABS.map(t=>{
+          const active = tab===t.id;
+          return (
+            <button key={t.id} className="nav-item" onClick={()=>setTab(t.id)}>
+              <div className="nav-icon" style={{background:active?"rgba(245,166,35,.18)":"transparent"}}>
+                <span style={{fontSize:20}}>{t.icon}</span>
+              </div>
+              <span className="nav-label" style={{color:active?"#F5A623":"#5A6170"}}>{t.label}</span>
+              {t.badge>0 && <span className="nav-badge">{t.badge}</span>}
+            </button>
+          );
+        })}
+      </nav>
+
+      {/* Cart sheet */}
+      {showCart && (
+        <CartSheet session={session} cart={cart} onCartChange={handleCartChange} onClose={()=>setShowCart(false)} onOrder={handleOrder}/>
+      )}
+
+      {/* Order tracker */}
+      {tracked && <OrderTracker orderId={tracked} onClose={()=>setTracked(null)}/>}
+
+      {/* Toast */}
+      {toast && <Toast msg={toast} onDone={()=>setToast(null)}/>}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// ROOT
+// ═══════════════════════════════════════════════════════════════════
+function App() {
+  const [splash,   setSplash]   = useState(true);
+  const [session,  setSessionSt] = useState(null);
+  const [loading,  setLoading]  = useState(true);
+
+  useEffect(() => {
+    const stored = getSession();
+    setSessionSt(stored);
+    setLoading(false);
+  }, []);
+
+  const handleAuth = (s) => {
+    setSession(s);
+    setSessionSt(s);
+  };
+
+  const handleLogout = () => {
+    clearSession();
+    setSessionSt(null);
+  };
+
+  if(splash) return <SplashScreen onDone={()=>setSplash(false)}/>;
+  if(loading) return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#080A0F"}}><Spinner/></div>;
+  if(!session) return <AuthPage onAuth={handleAuth}/>;
+  return <MainApp session={session} onLogout={handleLogout}/>;
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+
+<!-- PWA Service Worker -->
+<script>
+if("serviceWorker" in navigator){
+  window.addEventListener("load",()=>{
+    const sw=`
+const CACHE="nxsc-v1";
+const ASSETS=["/client.html","/"];
+self.addEventListener("install",e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS).catch(()=>{}))));
+self.addEventListener("fetch",e=>{
+  if(e.request.url.includes("supabase.co")||e.request.url.includes("onesignal"))return;
+  e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request).catch(()=>caches.match("/client.html"))));
+});`;
+    const blob=new Blob([sw],{type:"application/javascript"});
+    navigator.serviceWorker.register(URL.createObjectURL(blob)).catch(()=>{});
+  });
+}
+</script>
+</body>
+</html>
