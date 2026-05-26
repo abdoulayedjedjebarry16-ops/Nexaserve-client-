@@ -1033,6 +1033,7 @@ function NotificationsScreen({ session }) {
 function ProfilScreen({ session, onLogout, onSessionUpdate }) {
   const { client, restaurants, affiliations } = session;
   const [showAffiliate, setShowAffiliate] = useState(false);
+  const [confirmLogout, setConfirmLogout] = useState(false);
   const [toast, setToast] = useState(null);
 
   const nomComplet = `${client.prenom||""} ${client.nom||""}`.trim();
@@ -1083,9 +1084,19 @@ function ProfilScreen({ session, onLogout, onSessionUpdate }) {
       </div>
 
       {/* Déconnexion */}
-      <button className="c-btn c-btn-danger" onClick={onLogout} style={{width:"100%",padding:"14px",borderRadius:14,fontWeight:700,fontSize:14,cursor:"pointer",fontFamily:"Outfit,sans-serif"}}>
+      <button className="c-btn c-btn-danger" onClick={()=>setConfirmLogout(true)} style={{width:"100%",padding:"14px",borderRadius:14,fontWeight:700,fontSize:14,cursor:"pointer",fontFamily:"Outfit,sans-serif"}}>
         🚪 Se déconnecter
       </button>
+
+      {confirmLogout && (
+        <Sheet title="Se déconnecter" onClose={()=>setConfirmLogout(false)}>
+          <p style={{fontSize:14,color:"#9CA3B0",lineHeight:1.6,marginBottom:20}}>Voulez-vous vraiment vous déconnecter de votre compte ?</p>
+          <div style={{display:"flex",gap:10,marginBottom:8}}>
+            <button className="c-btn c-btn-ghost" onClick={()=>setConfirmLogout(false)} style={{flex:1,padding:"13px",borderRadius:12,fontWeight:700,fontSize:14,cursor:"pointer",fontFamily:"Outfit,sans-serif"}}>Annuler</button>
+            <button className="c-btn c-btn-danger" onClick={onLogout} style={{flex:1,padding:"13px",borderRadius:12,fontWeight:700,fontSize:14,cursor:"pointer",fontFamily:"Outfit,sans-serif"}}>Se déconnecter</button>
+          </div>
+        </Sheet>
+      )}
 
       {showAffiliate && <AffiliationSheet session={session} onDone={handleNewAffi} onClose={()=>setShowAffiliate(false)}/>}
       {toast && <Toast msg={toast} icon="✅" onDone={()=>setToast(null)}/>}
