@@ -777,7 +777,17 @@ function CartSheet({ session, cart, onCartChange, onClose, onOrder }) {
   const total = cart.reduce((s,i)=>s+i.qty*i.price,0);
   const [mode, setMode]   = useState("sur_place"); // sur_place | orange_money
   const [loading, setLoading] = useState(false);
-  const resto = session.restaurants?.find(r=>r.id===session.activeRestaurantId);
+  const restoBase = session.restaurants?.find(r=>r.id===session.activeRestaurantId);
+  const [orangeNum, setOrangeNum] = useState(restoBase?.orange_money_numero||null);
+  const resto = {...(restoBase||{}), orange_money_numero: orangeNum};
+
+  useEffect(()=>{
+    const rid = session.activeRestaurantId;
+    if(!rid) return;
+    sb.get("restaurants", `id=eq.${encodeURIComponent(rid)}&select=orange_money_numero`)
+      .then(rows=>{ if(rows?.[0]?.orange_money_numero) setOrangeNum(rows[0].orange_money_numero); })
+      .catch(()=>{});
+  },[session.activeRestaurantId]);
 
   const changeQty = (id, delta) => {
     const newCart = cart.map(c=>c.id===id?{...c,qty:Math.max(0,c.qty+delta)}:c).filter(c=>c.qty>0);
