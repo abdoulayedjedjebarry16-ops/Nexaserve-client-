@@ -383,9 +383,11 @@ function AuthPage({ onAuth }) {
     if(!lTel||!lPass){ err("Téléphone et mot de passe requis."); return; }
     setLoading(true); clr();
     try {
-      const rows = await sb.get("clients", `telephone=eq.${encodeURIComponent(lTel.trim())}&select=id,nom,prenom,telephone`);
+      const rows = await sb.get("clients", `telephone=eq.${encodeURIComponent(lTel.trim())}&select=id,nom,prenom,telephone,actif`);
       if(!rows?.length){ err("Numéro de téléphone introuvable."); setLoading(false); return; }
       const client = rows[0];
+      // Compte suspendu par le restaurant
+      if(client.actif===false){ err("Votre compte a été suspendu par le restaurant. Veuillez les contacter directement."); setLoading(false); return; }
       // Vérifier le mot de passe
       const pwRows = await sb.get("clients", `id=eq.${client.id}&password_hash=eq.${encodeURIComponent(lPass)}&select=id`);
       if(!pwRows?.length){ err("Mot de passe incorrect."); setLoading(false); return; }
@@ -394,7 +396,7 @@ function AuthPage({ onAuth }) {
       if(!affs?.length){ err("Aucun restaurant associé. Inscrivez-vous avec un code restaurant."); setLoading(false); return; }
       // Charger les infos restaurants
       const rids = affs.map(a=>a.restaurant_id);
-      const restos = await sb.get("restaurants", `id=in.(${rids.join(",")})&select=id,code,nom,plan,orange_money_numero`);
+      const restos = await sb.get("restaurants", `id=in.(${rids.join(",")})&select=id,code,nom,plan,orange_money_numero,journee_ouverte,date_journee`);
       const session = { client, affiliations: affs, restaurants: restos, activeRestaurantId: restos[0]?.id };
       setSession(session);
       initOneSignal(client.id);
@@ -673,7 +675,10 @@ function MenuScreen({ session, cart, onCartChange, onOpenCart }) {
           <div style={{width:44,height:44,borderRadius:14,background:"linear-gradient(135deg,#F5A623,#D4891A)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>🍽</div>
           <div style={{flex:1,minWidth:0}}>
             <div style={{fontFamily:"Outfit,sans-serif",fontWeight:800,fontSize:18,color:"#F0F2F8",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{resto?.nom||"Restaurant"}</div>
-            <div style={{fontSize:11,color:"#5A6170",marginTop:1}}>Menu en ligne</div>
+            {resto?.journee_ouverte
+              ? <div style={{fontSize:12,fontWeight:700,color:"#22C55E",marginTop:2,display:"flex",alignItems:"center",gap:5}}><span style={{width:8,height:8,borderRadius:"50%",background:"#22C55E",display:"inline-block"}}></span>Ouvert</div>
+              : <div style={{fontSize:12,fontWeight:700,color:"#EF4444",marginTop:2,display:"flex",alignItems:"center",gap:5}}><span style={{width:8,height:8,borderRadius:"50%",background:"#EF4444",display:"inline-block"}}></span>Fermé</div>
+            }
           </div>
         </div>
         {/* Search */}
@@ -1083,6 +1088,12 @@ function ProfilScreen({ session, onLogout, onSessionUpdate }) {
         </div>
       </div>
 
+      {/* Service client NexaServe */}
+      <a href="https://wa.me/224620764405" target="_blank" rel="noopener noreferrer"
+        style={{textDecoration:"none",display:"flex",alignItems:"center",justifyContent:"center",gap:8,width:"100%",padding:"14px",borderRadius:14,fontWeight:700,fontSize:14,fontFamily:"Outfit,sans-serif",background:"rgba(34,197,94,.15)",color:"#22C55E",border:"1px solid rgba(34,197,94,.3)",marginBottom:12}}>
+        💬 Contacter le service client NexaServe
+      </a>
+
       {/* Déconnexion */}
       <button className="c-btn c-btn-danger" onClick={()=>setConfirmLogout(true)} style={{width:"100%",padding:"14px",borderRadius:14,fontWeight:700,fontSize:14,cursor:"pointer",fontFamily:"Outfit,sans-serif"}}>
         🚪 Se déconnecter
@@ -1157,6 +1168,11 @@ function MainApp({ session: initialSession, onLogout }) {
   const handleOrder = async ({ cart, mode, total }) => {
     const client = session.client;
     const nomComplet = `${client.prenom||""} ${client.nom||""}`.trim();
+    // Vérifier que le compte n'a pas été suspendu par le restaurant
+    try {
+      const chk = await sb.get("clients", `id=eq.${client.id}&select=actif`);
+      if(chk?.[0]?.actif===false){ setToast("⛔ Votre compte a été suspendu par le restaurant. Veuillez les contacter."); return; }
+    } catch(e){}
     // Articles de la commande (stockés en jsonb dans orders.items) — format écosystème : nom/prix/quantite
     const items = cart.map(c=>({
       nom: c.name,
