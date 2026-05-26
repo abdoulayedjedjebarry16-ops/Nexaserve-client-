@@ -331,6 +331,16 @@ function SplashScreen({ onDone }) {
 // ═══════════════════════════════════════════════════════════════════
 // AUTH — INSCRIPTION / CONNEXION
 // ═══════════════════════════════════════════════════════════════════
+const SECRET_QUESTIONS = [
+  "Quelle est la ville de naissance de votre mère ?",
+  "Quel est le prénom de votre meilleur(e) ami(e) d'enfance ?",
+  "Quel était le nom de votre première école ?",
+  "Quel est le surnom de votre plus proche parent ?",
+  "Quelle est la marque de votre première voiture ?",
+  "Quel est le plat préféré de votre enfance ?",
+  "Dans quelle ville avez-vous passé votre lune de miel ?",
+  "Quel est le prénom de votre grand-mère maternelle ?",
+];
 function AuthPage({ onAuth }) {
   const [tab, setTab]       = useState(URL_CODE ? "register" : "login");    // login | register
   const [loading, setLoading] = useState(false);
@@ -347,6 +357,16 @@ function AuthPage({ onAuth }) {
   const [rPass,   setRPass]   = useState("");
   const [rPass2,  setRPass2]  = useState("");
   const [rCode,   setRCode]   = useState(URL_CODE || "");
+  const [rQuestion, setRQuestion] = useState("");
+  const [rAnswer,   setRAnswer]   = useState("");
+
+  // Mot de passe oublié state
+  const [fStep, setFStep]   = useState(1);          // 1=tel, 2=question, 3=nouveau mdp
+  const [fTel,  setFTel]    = useState("");
+  const [fClient, setFClient] = useState(null);     // client trouvé (avec question/réponse)
+  const [fAnswer, setFAnswer] = useState("");
+  const [fPass,  setFPass]  = useState("");
+  const [fPass2, setFPass2] = useState("");
 
   const err  = t => setMsg({type:"error",text:t});
   const succ = t => setMsg({type:"success",text:t});
@@ -388,6 +408,8 @@ function AuthPage({ onAuth }) {
     if(!rPrenom||!rNom||!rTel||!rPass||!rCode){ err("Tous les champs sont obligatoires."); return; }
     if(rPass!==rPass2){ err("Les mots de passe ne correspondent pas."); return; }
     if(rPass.length<4){ err("Mot de passe trop court (min. 4 caractères)."); return; }
+    if(!rQuestion){ err("Veuillez choisir une question secrète."); return; }
+    if(!rAnswer.trim()){ err("Veuillez saisir la réponse secrète."); return; }
     if(!rCode.trim().toUpperCase().startsWith("NXS")){ err("Code restaurant invalide (format NXS-XXXX)."); return; }
     setLoading(true); clr();
     try {
@@ -398,8 +420,8 @@ function AuthPage({ onAuth }) {
       // Vérifier que le téléphone n'existe pas déjà
       const existing = await sb.get("clients", `telephone=eq.${encodeURIComponent(rTel.trim())}&select=id`);
       if(existing?.length){ err("Ce numéro de téléphone est déjà utilisé."); setLoading(false); return; }
-      // Créer le client
-      const clientBody = { id:uid(), nom:rNom.trim(), prenom:rPrenom.trim(), telephone:rTel.trim(), password_hash:rPass, created_at:new Date().toISOString() };
+      // Créer le client (avec question secrète, réponse stockée en minuscules)
+      const clientBody = { id:uid(), nom:rNom.trim(), prenom:rPrenom.trim(), telephone:rTel.trim(), password_hash:rPass, secret_question:rQuestion, secret_answer:rAnswer.trim().toLowerCase(), created_at:new Date().toISOString() };
       const clients = await sb.post("clients", clientBody);
       const client = clients[0] || clientBody;
       // Créer l'affiliation
@@ -408,6 +430,39 @@ function AuthPage({ onAuth }) {
       setSession(session);
       initOneSignal(client.id);
       onAuth(session);
+    } catch(e){ err("Erreur : "+e.message); }
+    setLoading(false);
+  };
+
+  // ── MOT DE PASSE OUBLIÉ ────────────────────────────────────────
+  // Étape 1 : retrouver le client par téléphone et charger sa question secrète
+  const fStep1 = async () => {
+    if(!fTel.trim()){ err("Veuillez saisir votre numéro de téléphone."); return; }
+    setLoading(true); clr();
+    try {
+      const rows = await sb.get("clients", `telephone=eq.${encodeURIComponent(fTel.trim())}&select=id,secret_question,secret_answer`);
+      if(!rows?.length){ err("Numéro de téléphone introuvable."); setLoading(false); return; }
+      if(!rows[0].secret_question){ err("Aucune question secrète définie pour ce compte. Contactez votre restaurant."); setLoading(false); return; }
+      setFClient(rows[0]); setFStep(2); clr();
+    } catch(e){ err("Erreur : "+e.message); }
+    setLoading(false);
+  };
+  // Étape 2 : vérifier la réponse secrète (comparaison en minuscules)
+  const fStep2 = () => {
+    if(!fAnswer.trim()){ err("Veuillez saisir votre réponse."); return; }
+    if(fAnswer.trim().toLowerCase() !== (fClient.secret_answer||"")){ err("Réponse incorrecte."); return; }
+    setFStep(3); clr();
+  };
+  // Étape 3 : enregistrer le nouveau mot de passe
+  const fStep3 = async () => {
+    if(fPass!==fPass2){ err("Les mots de passe ne correspondent pas."); return; }
+    if(fPass.length<4){ err("Mot de passe trop court (min. 4 caractères)."); return; }
+    setLoading(true); clr();
+    try {
+      await sb.patch("clients", `id=eq.${fClient.id}`, { password_hash:fPass });
+      succ("Mot de passe modifié ! Vous pouvez vous connecter.");
+      setFTel(""); setFAnswer(""); setFPass(""); setFPass2(""); setFClient(null); setFStep(1);
+      setTab("login");
     } catch(e){ err("Erreur : "+e.message); }
     setLoading(false);
   };
@@ -444,6 +499,9 @@ function AuthPage({ onAuth }) {
           <button className="c-btn" onClick={doLogin} disabled={loading} style={{marginTop:4}}>
             {loading?"Connexion...":" Se connecter"}
           </button>
+          <div style={{textAlign:"center",marginTop:14}}>
+            <button onClick={()=>{setTab("forgot");setFStep(1);clr();}} style={{fontSize:13,color:"#F5A623",background:"none",border:"none",cursor:"pointer",fontWeight:600}}>Mot de passe oublié ?</button>
+          </div>
         </>}
 
         {tab==="register" && <>
@@ -456,6 +514,15 @@ function AuthPage({ onAuth }) {
           </Field>
           <Field label="Mot de passe"><InpEye value={rPass} onChange={e=>{setRPass(e.target.value);clr();}}/></Field>
           <Field label="Confirmer le mot de passe"><InpEye value={rPass2} onChange={e=>{setRPass2(e.target.value);clr();}}/></Field>
+          <Field label="Question secrète">
+            <select className="c-inp" value={rQuestion} onChange={e=>{setRQuestion(e.target.value);clr();}}>
+              <option value="">Choisir une question...</option>
+              {SECRET_QUESTIONS.map((q,i)=><option key={i} value={q}>{q}</option>)}
+            </select>
+          </Field>
+          <Field label="Réponse secrète">
+            <input className="c-inp" value={rAnswer} onChange={e=>{setRAnswer(e.target.value);clr();}} placeholder="Votre réponse"/>
+          </Field>
           <Field label="Code restaurant (obligatoire)">
             <input className="c-inp" value={rCode} onChange={e=>{setRCode(e.target.value.toUpperCase());clr();}} placeholder="NXS-XXXX" style={{letterSpacing:"0.1em",fontWeight:700}}/>
           </Field>
@@ -465,6 +532,35 @@ function AuthPage({ onAuth }) {
           <button className="c-btn" onClick={doRegister} disabled={loading}>
             {loading?"Création du compte...":"Créer mon compte"}
           </button>
+        </>}
+
+        {tab==="forgot" && <>
+          <div style={{display:"flex",justifyContent:"center",gap:8,marginBottom:18}}>
+            {[1,2,3].map(i=><div key={i} style={{width:28,height:5,borderRadius:3,background:fStep>=i?"#F5A623":"rgba(255,255,255,.12)",transition:"background .2s"}}/>)}
+          </div>
+          {fStep===1 && <>
+            <p style={{fontSize:13,color:"#9CA3B0",marginBottom:14,lineHeight:1.5}}>Saisissez le numéro de téléphone de votre compte pour récupérer votre mot de passe.</p>
+            <Field label="Numéro de téléphone">
+              <input className="c-inp" value={fTel} onChange={e=>{setFTel(e.target.value);clr();}} placeholder="6XX XX XX XX" type="tel" inputMode="tel"/>
+            </Field>
+            <button className="c-btn" onClick={fStep1} disabled={loading} style={{marginTop:4}}>{loading?"Recherche...":"Suivant"}</button>
+          </>}
+          {fStep===2 && <>
+            <p style={{fontSize:13,color:"#F0F2F8",marginBottom:14,fontWeight:600,lineHeight:1.5}}>{fClient?.secret_question}</p>
+            <Field label="Votre réponse">
+              <input className="c-inp" value={fAnswer} onChange={e=>{setFAnswer(e.target.value);clr();}} placeholder="Votre réponse"/>
+            </Field>
+            <button className="c-btn" onClick={fStep2} disabled={loading} style={{marginTop:4}}>Valider</button>
+          </>}
+          {fStep===3 && <>
+            <p style={{fontSize:13,color:"#9CA3B0",marginBottom:14,lineHeight:1.5}}>Définissez votre nouveau mot de passe.</p>
+            <Field label="Nouveau mot de passe"><InpEye value={fPass} onChange={e=>{setFPass(e.target.value);clr();}}/></Field>
+            <Field label="Confirmer le mot de passe"><InpEye value={fPass2} onChange={e=>{setFPass2(e.target.value);clr();}}/></Field>
+            <button className="c-btn" onClick={fStep3} disabled={loading} style={{marginTop:4}}>{loading?"Enregistrement...":"Enregistrer"}</button>
+          </>}
+          <div style={{textAlign:"center",marginTop:14}}>
+            <button onClick={()=>{setTab("login");setFStep(1);setFClient(null);setFTel("");setFAnswer("");setFPass("");setFPass2("");clr();}} style={{fontSize:13,color:"#5A6170",background:"none",border:"none",cursor:"pointer",fontWeight:600}}>← Retour à la connexion</button>
+          </div>
         </>}
       </div>
 
