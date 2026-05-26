@@ -646,6 +646,20 @@ function MenuScreen({ session, cart, onCartChange, onOpenCart }) {
       .catch(()=>setLoading(false));
   }, [rid]);
 
+  // Statut ouvert/fermé en temps réel (polling toutes les 20s + au montage)
+  useEffect(() => {
+    if(!rid) return;
+    let active = true;
+    const checkStatut = () => {
+      sb.get("restaurants", `id=eq.${encodeURIComponent(rid)}&select=id,nom,journee_ouverte,date_journee`)
+        .then(rows => { if(active && rows?.[0]) setResto(prev => ({...(prev||{}), ...rows[0]})); })
+        .catch(()=>{});
+    };
+    checkStatut();
+    const i = setInterval(checkStatut, 20000);
+    return () => { active = false; clearInterval(i); };
+  }, [rid]);
+
   const filtered = useMemo(() => menu.filter(item => {
     const matchCat = selCat==="all" || item.category===selCat;
     const matchSearch = !search || (item.name||"").toLowerCase().includes(search.toLowerCase());
@@ -1172,6 +1186,11 @@ function MainApp({ session: initialSession, onLogout }) {
     try {
       const chk = await sb.get("clients", `id=eq.${client.id}&select=actif`);
       if(chk?.[0]?.actif===false){ setToast("⛔ Votre compte a été suspendu par le restaurant. Veuillez les contacter."); return; }
+    } catch(e){}
+    // Vérifier que le restaurant est ouvert (temps réel)
+    try {
+      const rchk = await sb.get("restaurants", `id=eq.${rid}&select=journee_ouverte`);
+      if(rchk?.[0]?.journee_ouverte===false){ setToast("🔴 Le restaurant est actuellement fermé. Réessayez quand il sera ouvert."); return; }
     } catch(e){}
     // Articles de la commande (stockés en jsonb dans orders.items) — format écosystème : nom/prix/quantite
     const items = cart.map(c=>({
