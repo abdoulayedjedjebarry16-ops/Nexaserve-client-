@@ -88,6 +88,13 @@ const sb = {
     });
     if(!r.ok) throw new Error(await r.text());
     return r.json();
+  },
+  async del(table, filter) {
+    const r = await fetch(`${SB_URL}/rest/v1/${table}?${filter}`, {
+      method:"DELETE", headers: this.h
+    });
+    if(!r.ok) throw new Error(await r.text());
+    return true;
   }
 };
 
@@ -651,7 +658,7 @@ function MenuScreen({ session, cart, onCartChange, onOpenCart }) {
     if(!rid) return;
     let active = true;
     const checkStatut = () => {
-      sb.get("restaurants", `id=eq.${encodeURIComponent(rid)}&select=id,nom,journee_ouverte,date_journee,orange_money_numero`)
+      sb.get("restaurants", `id=eq.${encodeURIComponent(rid)}&select=id,nom,journee_ouverte,date_journee,orange_money_numero,telephone`)
         .then(rows => { if(active && rows?.[0]) setResto(prev => ({...(prev||{}), ...rows[0]})); })
         .catch(()=>{});
     };
@@ -694,6 +701,9 @@ function MenuScreen({ session, cart, onCartChange, onOpenCart }) {
               : <div style={{fontSize:12,fontWeight:700,color:"#EF4444",marginTop:2,display:"flex",alignItems:"center",gap:5}}><span style={{width:8,height:8,borderRadius:"50%",background:"#EF4444",display:"inline-block"}}></span>Fermé</div>
             }
           </div>
+          {resto?.telephone && (
+            <a href={`tel:${resto.telephone}`} title={"Appeler "+resto.telephone} style={{flexShrink:0,width:40,height:40,borderRadius:12,background:"rgba(245,166,35,.12)",border:"1px solid rgba(245,166,35,.3)",display:"flex",alignItems:"center",justifyContent:"center",color:"#F5A623",fontSize:18,textDecoration:"none"}}>📞</a>
+          )}
         </div>
         {/* Search */}
         <div style={{position:"relative",marginBottom:14}}>
@@ -776,17 +786,22 @@ function MenuScreen({ session, cart, onCartChange, onOpenCart }) {
 function CartSheet({ session, cart, onCartChange, onClose, onOrder }) {
   const total = cart.reduce((s,i)=>s+i.qty*i.price,0);
   const [mode, setMode]   = useState("sur_place"); // sur_place | orange_money
+  const [note, setNote]   = useState("");
   const [loading, setLoading] = useState(false);
   const restoBase = session.restaurants?.find(r=>r.id===session.activeRestaurantId);
   const [orangeNum, setOrangeNum] = useState(restoBase?.orange_money_numero||null);
+  const [isOpen, setIsOpen] = useState(restoBase?.journee_ouverte !== false);
   const resto = {...(restoBase||{}), orange_money_numero: orangeNum};
 
   useEffect(()=>{
     const rid = session.activeRestaurantId;
     if(!rid) return;
-    sb.get("restaurants", `id=eq.${encodeURIComponent(rid)}&select=orange_money_numero`)
-      .then(rows=>{ if(rows?.[0]?.orange_money_numero) setOrangeNum(rows[0].orange_money_numero); })
+    const check = () => sb.get("restaurants", `id=eq.${encodeURIComponent(rid)}&select=orange_money_numero,journee_ouverte`)
+      .then(rows=>{ if(rows?.[0]){ if(rows[0].orange_money_numero) setOrangeNum(rows[0].orange_money_numero); setIsOpen(rows[0].journee_ouverte !== false); } })
       .catch(()=>{});
+    check();
+    const i = setInterval(check, 20000);
+    return () => clearInterval(i);
   },[session.activeRestaurantId]);
 
   const changeQty = (id, delta) => {
@@ -796,9 +811,10 @@ function CartSheet({ session, cart, onCartChange, onClose, onOrder }) {
 
   const doOrder = async () => {
     if(!cart.length) return;
+    if(!isOpen){ alert("🔴 Le restaurant est actuellement fermé. Vous ne pouvez pas commander pour le moment."); return; }
     setLoading(true);
     try {
-      await onOrder({ cart, mode, total });
+      await onOrder({ cart, mode, total, note: note.trim() });
       onClose();
     } catch(e){ alert("Erreur : "+e.message); }
     setLoading(false);
@@ -836,6 +852,13 @@ function CartSheet({ session, cart, onCartChange, onClose, onOrder }) {
             <span style={{fontFamily:"Outfit,sans-serif",fontWeight:900,fontSize:20,color:"#F5A623"}}>{fmt(total)}</span>
           </div>
 
+          {/* Note pour la cuisine */}
+          <div style={{marginBottom:20}}>
+            <div style={{fontSize:11,fontWeight:700,color:"#5A6170",textTransform:"uppercase",letterSpacing:".6px",marginBottom:10}}>📝 Note pour la cuisine (optionnel)</div>
+            <textarea value={note} onChange={e=>setNote(e.target.value.slice(0,200))} placeholder="Ex: pas de piment, sans oignon..." rows={2} style={{width:"100%",background:"#171A24",border:"1px solid rgba(255,255,255,.08)",borderRadius:12,padding:"12px 14px",color:"#F0F2F8",fontSize:13,fontFamily:"inherit",resize:"none",boxSizing:"border-box"}}/>
+            <div style={{fontSize:10,color:"#5A6170",marginTop:4,textAlign:"right"}}>{note.length}/200</div>
+          </div>
+
           {/* Mode paiement */}
           <div style={{marginBottom:20}}>
             <div style={{fontSize:11,fontWeight:700,color:"#5A6170",textTransform:"uppercase",letterSpacing:".6px",marginBottom:10}}>Mode de paiement</div>
@@ -868,8 +891,14 @@ function CartSheet({ session, cart, onCartChange, onClose, onOrder }) {
             )
           )}
 
-          <button className="c-btn" onClick={doOrder} disabled={loading}>
-            {loading?"Envoi en cours...":"✅ Commander — "+fmt(total)}
+          {!isOpen && (
+            <div style={{background:"rgba(239,68,68,.08)",border:"1px solid rgba(239,68,68,.25)",borderRadius:14,padding:"14px 16px",marginBottom:16}}>
+              <div style={{fontSize:13,color:"#fca5a5",lineHeight:1.6,fontWeight:600}}>🔴 Le restaurant est actuellement fermé. Vous ne pouvez pas finaliser votre commande pour le moment. Vous pouvez préparer votre panier et commander dès la réouverture.</div>
+            </div>
+          )}
+
+          <button className="c-btn" onClick={doOrder} disabled={loading||!isOpen} style={!isOpen?{opacity:0.5,cursor:"not-allowed"}:{}}>
+            {!isOpen ? "🔴 Restaurant fermé" : loading?"Envoi en cours...":"✅ Commander — "+fmt(total)}
           </button>
         </>
       )}
@@ -880,14 +909,29 @@ function CartSheet({ session, cart, onCartChange, onClose, onOrder }) {
 // ═══════════════════════════════════════════════════════════════════
 // SUIVI COMMANDE
 // ═══════════════════════════════════════════════════════════════════
-function OrderTracker({ orderId, onClose }) {
+function OrderTracker({ orderId, onClose, onConfirmRecovered }) {
   const [order, setOrder] = useState(null);
+  const [resto, setResto] = useState(null);
+  const [paid, setPaid] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [confirming, setConfirming] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      const rows = await sb.get("orders", `id=eq.${orderId}&select=id,statut,total,created_at,motif_rejet,client_nom,mode_paiement_client,items`);
-      if(rows?.length) setOrder(rows[0]);
+      const rows = await sb.get("orders", `id=eq.${orderId}&select=id,statut,total,created_at,motif_rejet,client_nom,mode_paiement_client,items,table_id,restaurant_id,note`);
+      if(rows?.length) {
+        const o = rows[0];
+        setOrder(o);
+        // Charger le téléphone du restaurant et vérifier si un paiement existe pour cette table
+        try {
+          const [rRows, pRows] = await Promise.all([
+            sb.get("restaurants", `id=eq.${encodeURIComponent(o.restaurant_id)}&select=telephone,nom`),
+            o.table_id ? sb.get("payments", `table_id=eq.${encodeURIComponent(o.table_id)}&select=id`) : Promise.resolve([]),
+          ]);
+          if(rRows?.[0]) setResto(rRows[0]);
+          setPaid((pRows||[]).length > 0);
+        } catch(e){}
+      }
     } catch(e){}
     setLoading(false);
   }, [orderId]);
@@ -906,8 +950,23 @@ function OrderTracker({ orderId, onClose }) {
   ];
 
   const statutNorm = order?.statut==="waiting_client" ? "pret" : order?.statut;
+  const isPret = statutNorm === "pret";
   const statutIdx = order ? STEPS.findIndex(s=>s.id===statutNorm) : -1;
   const isRejetee = order?.statut==="rejete" || order?.statut==="annule";
+  const canConfirmRecovery = isPret && paid && order?.table_id;
+
+  const handleConfirmRecovery = async () => {
+    if(confirming) return;
+    setConfirming(true);
+    try {
+      // Supprimer les commandes liées à la table, puis la table elle-même (paiements conservés)
+      await sb.del("orders", `table_id=eq.${encodeURIComponent(order.table_id)}`);
+      await sb.del("tables", `id=eq.${encodeURIComponent(order.table_id)}`);
+      if(onConfirmRecovered) onConfirmRecovered();
+      onClose();
+    } catch(e){ alert("Erreur : "+(e.message||"impossible de confirmer")); }
+    setConfirming(false);
+  };
 
   return (
     <Sheet title="Suivi commande" onClose={onClose}>
@@ -930,8 +989,10 @@ function OrderTracker({ orderId, onClose }) {
           ) : (
             <div className="timeline" style={{marginBottom:20,paddingLeft:4}}>
               {STEPS.map((step,i)=>{
-                const done   = statutIdx > i;
-                const active = statutIdx === i;
+                const isLast = i === STEPS.length-1;
+                // Quand statut=pret et qu'on est sur la dernière étape : marquer comme done (terminé)
+                const done   = statutIdx > i || (isLast && isPret);
+                const active = statutIdx === i && !(isLast && isPret);
                 const future = statutIdx < i;
                 return (
                   <div key={step.id} className="tl-step">
@@ -942,12 +1003,39 @@ function OrderTracker({ orderId, onClose }) {
                       {i<STEPS.length-1 && <div className="tl-line" style={{background:done?"#22C55E33":"rgba(255,255,255,.08)"}}/>}
                     </div>
                     <div className="tl-content">
-                      <div style={{fontWeight:active?700:500,color:future?"#5A6170":done?"#22C55E":active?"#F5A623":"#F0F2F8",fontSize:14,transition:"color .3s"}}>{step.label}</div>
+                      <div style={{fontWeight:active||(isLast && isPret)?700:500,color:future?"#5A6170":done?"#22C55E":active?"#F5A623":"#F0F2F8",fontSize:14,transition:"color .3s"}}>{step.label}</div>
                       {active && <div style={{fontSize:11,color:"#9CA3B0",marginTop:2,animation:"pulse 2s infinite"}}>En cours...</div>}
+                      {isLast && isPret && <div style={{fontSize:12,color:"#22C55E",marginTop:3,fontWeight:600}}>🛍️ Venez chercher votre commande</div>}
                     </div>
                   </div>
                 );
               })}
+            </div>
+          )}
+
+          {/* Bouton confirmation récupération (visible uniquement si pret + payée) */}
+          {canConfirmRecovery && (
+            <button onClick={handleConfirmRecovery} disabled={confirming} style={{width:"100%",background:"linear-gradient(135deg,#22C55E,#16A34A)",border:"none",borderRadius:14,padding:"14px 16px",color:"#fff",fontWeight:800,fontSize:14,cursor:confirming?"wait":"pointer",marginBottom:16,boxShadow:"0 6px 20px rgba(34,197,94,.3)",opacity:confirming?0.6:1}}>
+              {confirming?"Confirmation...":"🛍️ J'ai récupéré ma commande"}
+            </button>
+          )}
+
+          {/* Téléphone restaurant */}
+          {resto?.telephone && !isRejetee && (
+            <a href={`tel:${resto.telephone}`} style={{display:"flex",alignItems:"center",gap:10,background:"rgba(245,166,35,.08)",border:"1px solid rgba(245,166,35,.2)",borderRadius:14,padding:"12px 16px",marginBottom:16,textDecoration:"none",color:"#F0F2F8"}}>
+              <span style={{fontSize:18}}>📞</span>
+              <div style={{flex:1}}>
+                <div style={{fontSize:11,color:"#9CA3B0"}}>Appeler le restaurant</div>
+                <div style={{fontSize:14,fontWeight:700,color:"#F5A623"}}>{resto.telephone}</div>
+              </div>
+            </a>
+          )}
+
+          {/* Note du client */}
+          {order.note && (
+            <div style={{background:"rgba(96,165,250,.08)",border:"1px solid rgba(96,165,250,.2)",borderRadius:14,padding:"12px 16px",marginBottom:16}}>
+              <div style={{fontSize:11,color:"#9CA3B0",marginBottom:4}}>📝 Votre note</div>
+              <div style={{fontSize:13,color:"#F0F2F8"}}>{order.note}</div>
             </div>
           )}
 
@@ -1195,7 +1283,7 @@ function MainApp({ session: initialSession, onLogout }) {
     saveCart(rid, newCart);
   };
 
-  const handleOrder = async ({ cart, mode, total }) => {
+  const handleOrder = async ({ cart, mode, total, note }) => {
     const client = session.client;
     const nomComplet = `${client.prenom||""} ${client.nom||""}`.trim();
     // Vérifier que le compte n'a pas été suspendu par le restaurant
@@ -1243,6 +1331,7 @@ function MainApp({ session: initialSession, onLogout }) {
       client_nom: nomComplet,
       client_telephone: client.telephone,
       mode_paiement_client: mode,
+      note: note || null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
@@ -1317,7 +1406,7 @@ function MainApp({ session: initialSession, onLogout }) {
       )}
 
       {/* Order tracker */}
-      {tracked && <OrderTracker orderId={tracked} onClose={()=>setTracked(null)}/>}
+      {tracked && <OrderTracker orderId={tracked} onClose={()=>setTracked(null)} onConfirmRecovered={()=>setToast("✅ Bonne dégustation !")}/>}
 
       {/* Toast */}
       {toast && <Toast msg={toast} onDone={()=>setToast(null)}/>}
