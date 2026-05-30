@@ -1159,6 +1159,25 @@ function ProfilScreen({ session, onLogout, onSessionUpdate }) {
   const [confirmLogout, setConfirmLogout] = useState(false);
   const [toast, setToast] = useState(null);
 
+  // Resynchroniser la liste des restaurants affiliés depuis la base à l'ouverture du profil.
+  // Couvre les affiliations créées via un lien, un autre appareil, ou hors de cette session.
+  useEffect(() => {
+    (async () => {
+      try {
+        const affs = await sb.get("client_affiliations", `client_id=eq.${client.id}&actif=eq.true&select=restaurant_id,affiliated_at`);
+        if (!affs?.length) return;
+        const rids = affs.map(a => a.restaurant_id);
+        const knownIds = (restaurants||[]).map(r => r.id);
+        // Rien de nouveau → ne rien faire
+        if (rids.length === knownIds.length && rids.every(id => knownIds.includes(id))) return;
+        const restos = await sb.get("restaurants", `id=in.(${rids.join(",")})&select=id,code,nom,plan,orange_money_numero,journee_ouverte,date_journee,telephone`);
+        const newSession = { ...session, affiliations: affs, restaurants: restos,
+          activeRestaurantId: session.activeRestaurantId || restos[0]?.id };
+        onSessionUpdate(newSession);
+      } catch(e) {}
+    })();
+  }, []);
+
   const nomComplet = `${client.prenom||""} ${client.nom||""}`.trim();
 
   const handleNewAffi = (resto) => {
@@ -1276,6 +1295,7 @@ function MainApp({ session: initialSession, onLogout }) {
 
   const handleSessionUpdate = (newSession) => {
     setSessionState(newSession);
+    setSession(newSession);
   };
 
   const handleCartChange = (newCart) => {
