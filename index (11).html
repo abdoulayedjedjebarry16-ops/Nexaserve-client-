@@ -1,0 +1,1468 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+<meta name="theme-color" content="#080A0F"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="NexaServe Client"/>
+<meta name="description" content="Commandez en ligne auprès de vos restaurants favoris via NexaServe Client."/>
+<meta property="og:title" content="NexaServe Client"/>
+<meta property="og:description" content="Commandez en ligne auprès de vos restaurants favoris."/>
+<meta property="og:type" content="website"/>
+<title>NexaServe Client — Commandez en ligne</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;overscroll-behavior:none}
+body{background:#080A0F;font-family:'Plus Jakarta Sans',system-ui,sans-serif;overflow-x:hidden;-webkit-font-smoothing:antialiased}
+::-webkit-scrollbar{width:2px}::-webkit-scrollbar-thumb{background:rgba(245,166,35,.3);border-radius:2px}
+input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
+select option{background:#0F1118;color:#F0F2F8}
+input,textarea,select{-webkit-user-select:text;user-select:text;touch-action:manipulation}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+@keyframes slideIn{from{transform:translateX(100%)}to{transform:translateX(0)}}
+@keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}
+@keyframes bounceIn{0%{transform:scale(0.8);opacity:0}60%{transform:scale(1.05)}100%{transform:scale(1);opacity:1}}
+@keyframes toastIn{from{transform:translateY(80px);opacity:0}to{transform:translateY(0);opacity:1}}
+</style>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800;900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+<!-- OneSignal SDK -->
+<script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useEffect, useMemo, useCallback, useRef, useReducer } = React;
+
+// ── ONESIGNAL ──────────────────────────────────────────────────────
+const ONESIGNAL_APP_ID = "d9cb7f25-a664-4046-b721-b2ea6f3f8235";
+const initOneSignal = (clientId) => {
+  try {
+    window.OneSignalDeferred = window.OneSignalDeferred || [];
+    window.OneSignalDeferred.push(async (OneSignal) => {
+      await OneSignal.init({ appId: ONESIGNAL_APP_ID, allowLocalhostAsSecureOrigin: true });
+      if (clientId) {
+        await OneSignal.login(clientId);
+      }
+    });
+  } catch(e) { console.warn("OneSignal init failed", e); }
+};
+
+// ── SUPABASE CONFIG ────────────────────────────────────────────────
+const SB_URL = "https://apqsldtzosodkunftixw.supabase.co";
+const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFwcXNsZHR6b3NvZGt1bmZ0aXh3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc1NjQzMzgsImV4cCI6MjA5MzE0MDMzOH0.NU5q6jRt7LY3FcgwANwXc_ADtp8bPjhpNAkiATcX93o";
+
+const sb = {
+  h: { "Content-Type":"application/json","apikey":SB_KEY,"Authorization":"Bearer "+SB_KEY },
+  async get(table, params="") {
+    const r = await fetch(`${SB_URL}/rest/v1/${table}?${params}`, { headers: this.h });
+    if(!r.ok) throw new Error(await r.text());
+    return r.json();
+  },
+  async post(table, body) {
+    const r = await fetch(`${SB_URL}/rest/v1/${table}`, {
+      method:"POST", headers:{...this.h,"Prefer":"return=representation"}, body:JSON.stringify(body)
+    });
+    if(!r.ok) throw new Error(await r.text());
+    return r.json();
+  },
+  async patch(table, filter, body) {
+    const r = await fetch(`${SB_URL}/rest/v1/${table}?${filter}`, {
+      method:"PATCH", headers:{...this.h,"Prefer":"return=representation"}, body:JSON.stringify(body)
+    });
+    if(!r.ok) throw new Error(await r.text());
+    return r.json();
+  },
+  async rpc(fn, body) {
+    const r = await fetch(`${SB_URL}/rest/v1/rpc/${fn}`, {
+      method:"POST", headers:{...this.h,"Prefer":"return=representation"}, body:JSON.stringify(body)
+    });
+    if(!r.ok) throw new Error(await r.text());
+    return r.json();
+  },
+  async del(table, filter) {
+    const r = await fetch(`${SB_URL}/rest/v1/${table}?${filter}`, {
+      method:"DELETE", headers: this.h
+    });
+    if(!r.ok) throw new Error(await r.text());
+    return true;
+  }
+};
+
+// ── UTILS ──────────────────────────────────────────────────────────
+const uid      = () => crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2)+Date.now().toString(36);
+const fmt      = n  => Math.round(Number(n)||0).toLocaleString("fr-FR")+" GNF";
+const fmtDate  = iso=> { try { return new Date(iso).toLocaleString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"}); } catch(e){return iso;} };
+const fmtShort = iso=> { try { return new Date(iso.includes("T")?iso:iso+"T00:00:00").toLocaleDateString("fr-FR",{day:"2-digit",month:"short",year:"numeric"}); } catch(e){return iso;} };
+
+// Lire ?code= dans l'URL
+const URL_CODE = (() => {
+  try { return new URLSearchParams(window.location.search).get("code") || ""; } catch(e){return "";}
+})();
+
+// ── SESSION ────────────────────────────────────────────────────────
+const SESSION_KEY = "nxsc_session";
+const getSession  = () => { try { const s=localStorage.getItem(SESSION_KEY); return s?JSON.parse(s):null; } catch(e){return null;} };
+const setSession  = s  => { localStorage.setItem(SESSION_KEY,JSON.stringify(s)); };
+const clearSession= ()  => { localStorage.removeItem(SESSION_KEY); };
+
+// Panier persistant par restaurant
+const CART_KEY = (rid) => `nxsc_cart_${rid}`;
+const getCart  = (rid) => { try { const c=localStorage.getItem(CART_KEY(rid)); return c?JSON.parse(c):[]; } catch(e){return [];} };
+const saveCart = (rid,cart) => { localStorage.setItem(CART_KEY(rid),JSON.stringify(cart)); };
+
+// ── STATUTS COMMANDE ───────────────────────────────────────────────
+const STATUTS = {
+  en_attente:            { label:"En attente",   color:"#F5A623", bg:"rgba(245,166,35,.15)",  icon:"⏳" },
+  en_preparation:        { label:"En préparation",color:"#60a5fa", bg:"rgba(96,165,250,.15)",  icon:"👨‍🍳" },
+  pret:                  { label:"Prête !",        color:"#22C55E", bg:"rgba(34,197,94,.2)",    icon:"🎉" },
+  waiting_client:        { label:"Prête !",        color:"#22C55E", bg:"rgba(34,197,94,.2)",    icon:"🎉" },
+  rejete:                { label:"Refusée",        color:"#EF4444", bg:"rgba(239,68,68,.15)",   icon:"❌" },
+  annule:                { label:"Annulée",        color:"#EF4444", bg:"rgba(239,68,68,.15)",   icon:"❌" },
+  encaisse:              { label:"Récupérée",      color:"#9CA3B0", bg:"rgba(156,163,175,.12)", icon:"📦" },
+};
+
+// ── CSS GLOBAL ─────────────────────────────────────────────────────
+const GLOBAL_CSS = `
+  :root {
+    --bg: #080A0F; --s1: #0F1118; --s2: #171A24; --s3: #1E2230;
+    --gold: #F5A623; --gold2: #D4891A; --goldf: rgba(245,166,35,0.12);
+    --green: #22C55E; --red: #EF4444; --blue: #60a5fa;
+    --t1: #F0F2F8; --t2: #9CA3B0; --t3: #5A6170;
+    --border: rgba(255,255,255,0.07); --border2: rgba(255,255,255,0.12);
+    --radius: 16px;
+  }
+  body { background:var(--bg); color:var(--t1); }
+  h1,h2,h3 { font-family:'Outfit',sans-serif; }
+
+  /* Inputs */
+  .c-inp { width:100%; background:var(--s2); border:1.5px solid var(--border2); border-radius:12px;
+    padding:13px 16px; color:var(--t1); font-size:15px; outline:none; box-sizing:border-box;
+    font-family:'Plus Jakarta Sans',system-ui,sans-serif; transition:border-color .2s; -webkit-appearance:none; }
+  .c-inp:focus { border-color:var(--gold); }
+  .c-inp::placeholder { color:var(--t3); }
+  .c-inp-pr { padding-right:48px; }
+
+  /* Bouton principal */
+  .c-btn { width:100%; background:var(--gold); border:none; border-radius:14px; padding:15px;
+    color:#080A0F; font-weight:800; font-size:15px; cursor:pointer;
+    font-family:'Outfit',sans-serif; transition:background .2s,transform .1s; letter-spacing:0.01em; }
+  .c-btn:active { transform:scale(.98); }
+  .c-btn:disabled { opacity:.5; cursor:not-allowed; }
+  .c-btn-ghost { background:var(--s2); border:1px solid var(--border2); color:var(--t2); }
+  .c-btn-danger { background:rgba(239,68,68,.15); border:1px solid rgba(239,68,68,.3); color:#ef4444; }
+
+  /* Bottom sheet */
+  .sheet-overlay { position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:1000;
+    display:flex;align-items:flex-end;justify-content:center;backdrop-filter:blur(4px); }
+  .sheet { background:var(--s1);border-radius:24px 24px 0 0;width:100%;max-width:500px;
+    max-height:92vh;overflow-y:auto;padding-bottom:env(safe-area-inset-bottom,20px); }
+  .sheet-handle { width:40px;height:4px;background:var(--border2);border-radius:2px;
+    margin:12px auto 0; }
+  .sheet-header { display:flex;align-items:center;justify-content:space-between;
+    padding:16px 20px 14px;border-bottom:1px solid var(--border); }
+  .sheet-title { font-size:18px;font-weight:700;font-family:'Outfit',sans-serif; }
+  .sheet-close { background:var(--s2);border:none;border-radius:10px;padding:7px 12px;
+    cursor:pointer;color:var(--t2);font-size:15px; }
+
+  /* Cards */
+  .c-card { background:var(--s1);border:1px solid var(--border);border-radius:var(--radius);padding:16px; }
+
+  /* Badge */
+  .c-badge { display:inline-flex;align-items:center;gap:4px;
+    padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;white-space:nowrap; }
+
+  /* Loader spinner */
+  .spinner { width:32px;height:32px;border:3px solid rgba(245,166,35,.2);
+    border-top-color:var(--gold);border-radius:50%;animation:spin .8s linear infinite; }
+
+  /* Toast */
+  .toast { position:fixed;bottom:90px;left:50%;transform:translateX(-50%);z-index:9999;
+    background:var(--s3);border:1px solid var(--border2);border-radius:14px;
+    padding:12px 20px;font-size:13px;font-weight:600;color:var(--t1);
+    box-shadow:0 8px 32px rgba(0,0,0,.4);animation:toastIn .3s ease;
+    display:flex;align-items:center;gap:8px;max-width:320px;white-space:nowrap; }
+
+  /* Nav bar */
+  .nav-bar { position:fixed;bottom:0;left:50%;transform:translateX(-50%);
+    width:100%;max-width:500px;background:rgba(8,10,15,.97);
+    border-top:1px solid var(--border);display:flex;
+    padding:8px 0 calc(8px + env(safe-area-inset-bottom,0px));z-index:500;
+    backdrop-filter:blur(20px); }
+  .nav-item { flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;
+    background:none;border:none;cursor:pointer;padding:4px 0;position:relative; }
+  .nav-icon { width:38px;height:38px;border-radius:12px;display:flex;align-items:center;
+    justify-content:center;font-size:18px;transition:background .2s; }
+  .nav-label { font-size:10px;font-weight:600;transition:color .2s; }
+  .nav-badge { position:absolute;top:2px;right:calc(50% - 22px);background:#ef4444;
+    color:#fff;border-radius:10px;font-size:9px;font-weight:800;
+    padding:1px 5px;min-width:16px;text-align:center; }
+
+  /* Menu item card */
+  .menu-card { background:var(--s1);border:1px solid var(--border);border-radius:var(--radius);
+    overflow:hidden;display:flex;flex-direction:column;transition:border-color .2s; }
+  .menu-card:active { border-color:var(--gold); }
+
+  /* Qty pill */
+  .qty-pill { display:flex;align-items:center;gap:0;background:var(--s2);border-radius:12px;overflow:hidden; }
+  .qty-btn { width:36px;height:36px;background:none;border:none;cursor:pointer;
+    color:var(--gold);font-size:18px;font-weight:700;display:flex;align-items:center;justify-content:center; }
+  .qty-val { width:28px;text-align:center;font-weight:700;font-size:14px;color:var(--t1); }
+
+  /* Order status timeline */
+  .timeline { display:flex;flex-direction:column;gap:0; }
+  .tl-step { display:flex;gap:14px;padding:0 0 20px; }
+  .tl-dot { display:flex;flex-direction:column;align-items:center;gap:0;flex-shrink:0;width:28px; }
+  .tl-circle { width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px; }
+  .tl-line { width:2px;flex:1;min-height:16px;background:var(--border);margin-top:4px; }
+  .tl-content { padding-top:4px;flex:1; }
+
+  /* Shimmer skeleton */
+  .shimmer { background:linear-gradient(90deg,var(--s2) 0%,var(--s3) 50%,var(--s2) 100%);
+    background-size:200% 100%;animation:shimmer 1.4s infinite;border-radius:8px; }
+
+  /* Notif dot */
+  .notif-dot { width:8px;height:8px;border-radius:50%;background:#ef4444;
+    position:absolute;top:6px;right:calc(50% - 20px); }
+  
+  /* Scroll snapping for restaurant switcher */
+  .resto-scroll { display:flex;gap:10px;overflow-x:auto;padding:0 20px 4px;
+    scrollbar-width:none;-ms-overflow-style:none; }
+  .resto-scroll::-webkit-scrollbar { display:none; }
+`;
+
+// ── COMPOSANTS UI ──────────────────────────────────────────────────
+
+function Toast({ msg, icon="✓", onDone }) {
+  useEffect(() => { const t = setTimeout(onDone, 2200); return () => clearTimeout(t); }, []);
+  return <div className="toast"><span>{icon}</span>{msg}</div>;
+}
+
+function Spinner({ size=32, color="#F5A623" }) {
+  return <div style={{width:size,height:size,border:`3px solid ${color}33`,borderTopColor:color,borderRadius:"50%",animation:"spin .8s linear infinite"}}/>;
+}
+
+function Loader({ msg="Chargement..." }) {
+  return (
+    <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"60px 0",gap:14}}>
+      <Spinner size={36}/>
+      <div style={{fontSize:13,color:"#5A6170"}}>{msg}</div>
+    </div>
+  );
+}
+
+function Sheet({ title, onClose, children, noPad=false }) {
+  return (
+    <div className="sheet-overlay" onClick={onClose}>
+      <div className="sheet" onClick={e=>e.stopPropagation()}>
+        <div className="sheet-handle"/>
+        <div className="sheet-header">
+          <span className="sheet-title">{title}</span>
+          <button className="sheet-close" onClick={onClose}>✕</button>
+        </div>
+        <div style={noPad?{}:{padding:"18px 20px 8px"}}>{children}</div>
+      </div>
+    </div>
+  );
+}
+
+function Field({ label, children, error }) {
+  return (
+    <div style={{marginBottom:16}}>
+      <label style={{display:"block",fontSize:11,fontWeight:700,color:"#5A6170",marginBottom:7,textTransform:"uppercase",letterSpacing:".6px"}}>{label}</label>
+      {children}
+      {error && <div style={{fontSize:12,color:"#EF4444",marginTop:5}}>{error}</div>}
+    </div>
+  );
+}
+
+function InpEye({ value, onChange, placeholder }) {
+  const [show, setShow] = useState(false);
+  return (
+    <div style={{position:"relative"}}>
+      <input className={`c-inp c-inp-pr`} type={show?"text":"password"} value={value} onChange={onChange} placeholder={placeholder||"••••••••"}/>
+      <button onClick={()=>setShow(s=>!s)} type="button" style={{position:"absolute",right:0,top:0,height:"100%",width:46,background:"none",border:"none",cursor:"pointer",color:"#5A6170",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center"}}>{show?"🙈":"👁"}</button>
+    </div>
+  );
+}
+
+function StatusBadge({ statut }) {
+  const s = STATUTS[statut] || { label:statut, color:"#9CA3B0", bg:"rgba(156,163,175,.12)", icon:"•" };
+  return <span className="c-badge" style={{background:s.bg,color:s.color}}>{s.icon} {s.label}</span>;
+}
+
+function OfflineBanner() {
+  const [offline, setOffline] = useState(!navigator.onLine);
+  useEffect(() => {
+    const on=()=>setOffline(false), off=()=>setOffline(true);
+    window.addEventListener("online",on); window.addEventListener("offline",off);
+    return ()=>{ window.removeEventListener("online",on); window.removeEventListener("offline",off); };
+  },[]);
+  if(!offline) return null;
+  return (
+    <div style={{position:"fixed",top:0,left:0,right:0,zIndex:9999,background:"#dc2626",color:"#fff",textAlign:"center",padding:"8px 16px",fontSize:13,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
+      <span>📵</span> Hors ligne — Vérifiez votre connexion
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// SPLASH SCREEN
+// ═══════════════════════════════════════════════════════════════════
+function SplashScreen({ onDone }) {
+  useEffect(() => { const t = setTimeout(onDone, 1800); return ()=>clearTimeout(t); }, []);
+  return (
+    <div style={{position:"fixed",inset:0,background:"#080A0F",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",zIndex:9999}}>
+      <div style={{animation:"bounceIn .6s ease",textAlign:"center"}}>
+        <div style={{width:90,height:90,borderRadius:28,background:"linear-gradient(135deg,#F5A623,#D4891A)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:44,boxShadow:"0 8px 40px rgba(245,166,35,.4)",marginBottom:22,marginLeft:"auto",marginRight:"auto"}}>🍽</div>
+        <h1 style={{fontFamily:"Outfit,sans-serif",fontSize:32,fontWeight:900,color:"#F5A623",letterSpacing:"-0.5px"}}>NexaServe</h1>
+        <p style={{fontSize:12,color:"#5A6170",letterSpacing:"3px",textTransform:"uppercase",marginTop:6}}>Client</p>
+      </div>
+      <div style={{position:"absolute",bottom:48,display:"flex",flexDirection:"column",alignItems:"center",gap:10}}>
+        <Spinner size={24} color="#F5A623"/>
+        <span style={{fontSize:11,color:"#5A6170"}}>Chargement...</span>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// AUTH — INSCRIPTION / CONNEXION
+// ═══════════════════════════════════════════════════════════════════
+const SECRET_QUESTIONS = [
+  "Quelle est la ville de naissance de votre mère ?",
+  "Quel est le prénom de votre meilleur(e) ami(e) d'enfance ?",
+  "Quel était le nom de votre première école ?",
+  "Quel est le surnom de votre plus proche parent ?",
+  "Quelle est la marque de votre première voiture ?",
+  "Quel est le plat préféré de votre enfance ?",
+  "Dans quelle ville avez-vous passé votre lune de miel ?",
+  "Quel est le prénom de votre grand-mère maternelle ?",
+];
+function AuthPage({ onAuth }) {
+  const [tab, setTab]       = useState(URL_CODE ? "register" : "login");    // login | register
+  const [loading, setLoading] = useState(false);
+  const [msg, setMsg]       = useState({type:"",text:""});
+
+  // Login state
+  const [lTel,  setLTel]  = useState("");
+  const [lPass, setLPass] = useState("");
+
+  // Register state
+  const [rPrenom, setRPrenom] = useState("");
+  const [rNom,    setRNom]    = useState("");
+  const [rTel,    setRTel]    = useState("");
+  const [rPass,   setRPass]   = useState("");
+  const [rPass2,  setRPass2]  = useState("");
+  const [rCode,   setRCode]   = useState(URL_CODE || "");
+  const [rQuestion, setRQuestion] = useState("");
+  const [rAnswer,   setRAnswer]   = useState("");
+
+  // Mot de passe oublié state
+  const [fStep, setFStep]   = useState(1);          // 1=tel, 2=question, 3=nouveau mdp
+  const [fTel,  setFTel]    = useState("");
+  const [fClient, setFClient] = useState(null);     // client trouvé (avec question/réponse)
+  const [fAnswer, setFAnswer] = useState("");
+  const [fPass,  setFPass]  = useState("");
+  const [fPass2, setFPass2] = useState("");
+
+  const err  = t => setMsg({type:"error",text:t});
+  const succ = t => setMsg({type:"success",text:t});
+  const clr  = () => setMsg({type:"",text:""});
+
+  const MsgBox = () => msg.text ? (
+    <div style={{background:msg.type==="error"?"rgba(239,68,68,.1)":"rgba(34,197,94,.1)",border:`1px solid ${msg.type==="error"?"rgba(239,68,68,.3)":"rgba(34,197,94,.3)"}`,borderRadius:12,padding:"11px 14px",marginBottom:14,color:msg.type==="error"?"#EF4444":"#22C55E",fontSize:13,fontWeight:500}}>
+      {msg.type==="error"?"⚠️ ":"✓ "}{msg.text}
+    </div>
+  ) : null;
+
+  // ── CONNEXION ──────────────────────────────────────────────────
+  const doLogin = async () => {
+    if(!lTel||!lPass){ err("Téléphone et mot de passe requis."); return; }
+    setLoading(true); clr();
+    try {
+      const rows = await sb.get("clients", `telephone=eq.${encodeURIComponent(lTel.trim())}&select=id,nom,prenom,telephone,actif`);
+      if(!rows?.length){ err("Numéro de téléphone introuvable."); setLoading(false); return; }
+      const client = rows[0];
+      // Compte suspendu par le restaurant
+      if(client.actif===false){ err("Votre compte a été suspendu par le restaurant. Veuillez les contacter directement."); setLoading(false); return; }
+      // Vérifier le mot de passe
+      const pwRows = await sb.get("clients", `id=eq.${client.id}&password_hash=eq.${encodeURIComponent(lPass)}&select=id`);
+      if(!pwRows?.length){ err("Mot de passe incorrect."); setLoading(false); return; }
+      // Charger les affiliations
+      const affs = await sb.get("client_affiliations", `client_id=eq.${client.id}&actif=eq.true&select=restaurant_id,affiliated_at`);
+      if(!affs?.length){ err("Aucun restaurant associé. Inscrivez-vous avec un code restaurant."); setLoading(false); return; }
+      // Charger les infos restaurants
+      const rids = affs.map(a=>a.restaurant_id);
+      const restos = await sb.get("restaurants", `id=in.(${rids.join(",")})&select=id,code,nom,plan,orange_money_numero,journee_ouverte,date_journee`);
+      const session = { client, affiliations: affs, restaurants: restos, activeRestaurantId: restos[0]?.id };
+      setSession(session);
+      initOneSignal(client.id);
+      onAuth(session);
+    } catch(e){ err("Erreur de connexion : "+e.message); }
+    setLoading(false);
+  };
+
+  // ── INSCRIPTION ────────────────────────────────────────────────
+  const doRegister = async () => {
+    if(!rPrenom||!rNom||!rTel||!rPass||!rCode){ err("Tous les champs sont obligatoires."); return; }
+    if(rPass!==rPass2){ err("Les mots de passe ne correspondent pas."); return; }
+    if(rPass.length<4){ err("Mot de passe trop court (min. 4 caractères)."); return; }
+    if(!rQuestion){ err("Veuillez choisir une question secrète."); return; }
+    if(!rAnswer.trim()){ err("Veuillez saisir la réponse secrète."); return; }
+    if(!rCode.trim().toUpperCase().startsWith("NXS")){ err("Code restaurant invalide (format NXS-XXXX)."); return; }
+    setLoading(true); clr();
+    try {
+      // Vérifier le code restaurant
+      const restos = await sb.get("restaurants", `code=eq.${encodeURIComponent(rCode.trim().toUpperCase())}&select=id,nom,plan,statut_abo,date_expiration,orange_money_numero`);
+      if(!restos?.length){ err("Code restaurant introuvable. Vérifiez le code NXS-XXXX."); setLoading(false); return; }
+      const resto = restos[0];
+      // Vérifier que le téléphone n'existe pas déjà
+      const existing = await sb.get("clients", `telephone=eq.${encodeURIComponent(rTel.trim())}&select=id`);
+      if(existing?.length){ err("Ce numéro de téléphone est déjà utilisé."); setLoading(false); return; }
+      // Créer le client (avec question secrète, réponse stockée en minuscules)
+      const clientBody = { id:uid(), nom:rNom.trim(), prenom:rPrenom.trim(), telephone:rTel.trim(), password_hash:rPass, secret_question:rQuestion, secret_answer:rAnswer.trim().toLowerCase(), created_at:new Date().toISOString() };
+      const clients = await sb.post("clients", clientBody);
+      const client = clients[0] || clientBody;
+      // Créer l'affiliation
+      await sb.post("client_affiliations", { id:uid(), client_id:client.id, restaurant_id:resto.id, affiliated_at:new Date().toISOString(), actif:true });
+      const session = { client, affiliations:[{restaurant_id:resto.id,affiliated_at:new Date().toISOString(),actif:true}], restaurants:[resto], activeRestaurantId:resto.id };
+      setSession(session);
+      initOneSignal(client.id);
+      onAuth(session);
+    } catch(e){ err("Erreur : "+e.message); }
+    setLoading(false);
+  };
+
+  // ── MOT DE PASSE OUBLIÉ ────────────────────────────────────────
+  // Étape 1 : retrouver le client par téléphone et charger sa question secrète
+  const fStep1 = async () => {
+    if(!fTel.trim()){ err("Veuillez saisir votre numéro de téléphone."); return; }
+    setLoading(true); clr();
+    try {
+      const rows = await sb.get("clients", `telephone=eq.${encodeURIComponent(fTel.trim())}&select=id,secret_question,secret_answer`);
+      if(!rows?.length){ err("Numéro de téléphone introuvable."); setLoading(false); return; }
+      if(!rows[0].secret_question){ err("Aucune question secrète définie pour ce compte. Contactez votre restaurant."); setLoading(false); return; }
+      setFClient(rows[0]); setFStep(2); clr();
+    } catch(e){ err("Erreur : "+e.message); }
+    setLoading(false);
+  };
+  // Étape 2 : vérifier la réponse secrète (comparaison en minuscules)
+  const fStep2 = () => {
+    if(!fAnswer.trim()){ err("Veuillez saisir votre réponse."); return; }
+    if(fAnswer.trim().toLowerCase() !== (fClient.secret_answer||"")){ err("Réponse incorrecte."); return; }
+    setFStep(3); clr();
+  };
+  // Étape 3 : enregistrer le nouveau mot de passe
+  const fStep3 = async () => {
+    if(fPass!==fPass2){ err("Les mots de passe ne correspondent pas."); return; }
+    if(fPass.length<4){ err("Mot de passe trop court (min. 4 caractères)."); return; }
+    setLoading(true); clr();
+    try {
+      await sb.patch("clients", `id=eq.${fClient.id}`, { password_hash:fPass });
+      succ("Mot de passe modifié ! Vous pouvez vous connecter.");
+      setFTel(""); setFAnswer(""); setFPass(""); setFPass2(""); setFClient(null); setFStep(1);
+      setTab("login");
+    } catch(e){ err("Erreur : "+e.message); }
+    setLoading(false);
+  };
+
+  return (
+    <div style={{minHeight:"100vh",background:"#080A0F",display:"flex",flexDirection:"column",overflowY:"auto"}}>
+      <style>{GLOBAL_CSS}</style>
+      <OfflineBanner/>
+      {/* Logo */}
+      <div style={{textAlign:"center",padding:"44px 0 28px"}}>
+        <div style={{width:72,height:72,borderRadius:22,background:"linear-gradient(135deg,#F5A623,#D4891A)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:34,boxShadow:"0 6px 30px rgba(245,166,35,.35)",margin:"0 auto 16px"}}>🍽</div>
+        <h1 style={{fontFamily:"Outfit,sans-serif",fontSize:28,fontWeight:900,color:"#F5A623",letterSpacing:"-0.5px"}}>NexaServe</h1>
+        <p style={{fontSize:11,color:"#5A6170",letterSpacing:"3px",textTransform:"uppercase",marginTop:5}}>Client</p>
+      </div>
+
+      {/* Tabs */}
+      <div style={{display:"flex",margin:"0 20px 20px",background:"#0F1118",borderRadius:14,padding:4,gap:4}}>
+        {[{id:"login",l:"Connexion"},{id:"register",l:"Inscription"}].map(t=>(
+          <button key={t.id} onClick={()=>{setTab(t.id);clr();}} style={{flex:1,padding:"10px",borderRadius:10,border:"none",background:tab===t.id?"#F5A623":  "none",color:tab===t.id?"#080A0F":"#5A6170",fontWeight:700,fontSize:13,cursor:"pointer",fontFamily:"Outfit,sans-serif",transition:"background .2s,color .2s"}}>{t.l}</button>
+        ))}
+      </div>
+
+      {/* Card */}
+      <div style={{margin:"0 20px",background:"#0F1118",borderRadius:20,padding:"22px 20px",border:"1px solid rgba(255,255,255,.07)"}}>
+        <MsgBox/>
+
+        {tab==="login" && <>
+          <Field label="Numéro de téléphone">
+            <input className="c-inp" value={lTel} onChange={e=>{setLTel(e.target.value);clr();}} placeholder="6XX XX XX XX" type="tel" inputMode="tel"/>
+          </Field>
+          <Field label="Mot de passe">
+            <InpEye value={lPass} onChange={e=>{setLPass(e.target.value);clr();}}/>
+          </Field>
+          <button className="c-btn" onClick={doLogin} disabled={loading} style={{marginTop:4}}>
+            {loading?"Connexion...":" Se connecter"}
+          </button>
+          <div style={{textAlign:"center",marginTop:14}}>
+            <button onClick={()=>{setTab("forgot");setFStep(1);clr();}} style={{fontSize:13,color:"#F5A623",background:"none",border:"none",cursor:"pointer",fontWeight:600}}>Mot de passe oublié ?</button>
+          </div>
+        </>}
+
+        {tab==="register" && <>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+            <Field label="Prénom"><input className="c-inp" value={rPrenom} onChange={e=>{setRPrenom(e.target.value);clr();}} placeholder="Prénom"/></Field>
+            <Field label="Nom"><input className="c-inp" value={rNom} onChange={e=>{setRNom(e.target.value);clr();}} placeholder="Nom"/></Field>
+          </div>
+          <Field label="Téléphone">
+            <input className="c-inp" value={rTel} onChange={e=>{setRTel(e.target.value);clr();}} placeholder="6XX XX XX XX" type="tel" inputMode="tel"/>
+          </Field>
+          <Field label="Mot de passe"><InpEye value={rPass} onChange={e=>{setRPass(e.target.value);clr();}}/></Field>
+          <Field label="Confirmer le mot de passe"><InpEye value={rPass2} onChange={e=>{setRPass2(e.target.value);clr();}}/></Field>
+          <Field label="Question secrète">
+            <select className="c-inp" value={rQuestion} onChange={e=>{setRQuestion(e.target.value);clr();}}>
+              <option value="">Choisir une question...</option>
+              {SECRET_QUESTIONS.map((q,i)=><option key={i} value={q}>{q}</option>)}
+            </select>
+          </Field>
+          <Field label="Réponse secrète">
+            <input className="c-inp" value={rAnswer} onChange={e=>{setRAnswer(e.target.value);clr();}} placeholder="Votre réponse"/>
+          </Field>
+          <Field label="Code restaurant (obligatoire)">
+            <input className="c-inp" value={rCode} onChange={e=>{setRCode(e.target.value.toUpperCase());clr();}} placeholder="NXS-XXXX" style={{letterSpacing:"0.1em",fontWeight:700}}/>
+          </Field>
+          <div style={{background:"rgba(245,166,35,.08)",border:"1px solid rgba(245,166,35,.2)",borderRadius:10,padding:"10px 14px",marginBottom:16,fontSize:12,color:"#9CA3B0",lineHeight:1.5}}>
+            💡 Le code restaurant vous est fourni par votre restaurant. Scannez le QR code ou saisissez-le manuellement.
+          </div>
+          <button className="c-btn" onClick={doRegister} disabled={loading}>
+            {loading?"Création du compte...":"Créer mon compte"}
+          </button>
+        </>}
+
+        {tab==="forgot" && <>
+          <div style={{display:"flex",justifyContent:"center",gap:8,marginBottom:18}}>
+            {[1,2,3].map(i=><div key={i} style={{width:28,height:5,borderRadius:3,background:fStep>=i?"#F5A623":"rgba(255,255,255,.12)",transition:"background .2s"}}/>)}
+          </div>
+          {fStep===1 && <>
+            <p style={{fontSize:13,color:"#9CA3B0",marginBottom:14,lineHeight:1.5}}>Saisissez le numéro de téléphone de votre compte pour récupérer votre mot de passe.</p>
+            <Field label="Numéro de téléphone">
+              <input className="c-inp" value={fTel} onChange={e=>{setFTel(e.target.value);clr();}} placeholder="6XX XX XX XX" type="tel" inputMode="tel"/>
+            </Field>
+            <button className="c-btn" onClick={fStep1} disabled={loading} style={{marginTop:4}}>{loading?"Recherche...":"Suivant"}</button>
+          </>}
+          {fStep===2 && <>
+            <p style={{fontSize:13,color:"#F0F2F8",marginBottom:14,fontWeight:600,lineHeight:1.5}}>{fClient?.secret_question}</p>
+            <Field label="Votre réponse">
+              <input className="c-inp" value={fAnswer} onChange={e=>{setFAnswer(e.target.value);clr();}} placeholder="Votre réponse"/>
+            </Field>
+            <button className="c-btn" onClick={fStep2} disabled={loading} style={{marginTop:4}}>Valider</button>
+          </>}
+          {fStep===3 && <>
+            <p style={{fontSize:13,color:"#9CA3B0",marginBottom:14,lineHeight:1.5}}>Définissez votre nouveau mot de passe.</p>
+            <Field label="Nouveau mot de passe"><InpEye value={fPass} onChange={e=>{setFPass(e.target.value);clr();}}/></Field>
+            <Field label="Confirmer le mot de passe"><InpEye value={fPass2} onChange={e=>{setFPass2(e.target.value);clr();}}/></Field>
+            <button className="c-btn" onClick={fStep3} disabled={loading} style={{marginTop:4}}>{loading?"Enregistrement...":"Enregistrer"}</button>
+          </>}
+          <div style={{textAlign:"center",marginTop:14}}>
+            <button onClick={()=>{setTab("login");setFStep(1);setFClient(null);setFTel("");setFAnswer("");setFPass("");setFPass2("");clr();}} style={{fontSize:13,color:"#5A6170",background:"none",border:"none",cursor:"pointer",fontWeight:600}}>← Retour à la connexion</button>
+          </div>
+        </>}
+      </div>
+
+      <div style={{textAlign:"center",padding:"20px 0 32px",fontSize:11,color:"#5A6170"}}>© 2026 NexaServe · Réseau privé restauration</div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// AFFILIATION — Ajouter un restaurant
+// ═══════════════════════════════════════════════════════════════════
+function AffiliationSheet({ session, onDone, onClose }) {
+  const [code, setCode]   = useState(URL_CODE||"");
+  const [loading, setLoading] = useState(false);
+  const [msg, setMsg]     = useState({type:"",text:""});
+
+  const doAffiliate = async () => {
+    if(!code.trim()){ setMsg({type:"error",text:"Code restaurant requis."}); return; }
+    setLoading(true); setMsg({type:"",text:""});
+    try {
+      const restos = await sb.get("restaurants", `code=eq.${encodeURIComponent(code.trim().toUpperCase())}&select=id,nom,plan,orange_money_numero`);
+      if(!restos?.length){ setMsg({type:"error",text:"Code restaurant introuvable."}); setLoading(false); return; }
+      const resto = restos[0];
+      // Vérifier si déjà affilié
+      const existing = await sb.get("client_affiliations", `client_id=eq.${session.client.id}&restaurant_id=eq.${resto.id}&select=id,actif`);
+      if(existing?.length) {
+        if(existing[0].actif){ setMsg({type:"error",text:"Vous êtes déjà affilié à ce restaurant."}); setLoading(false); return; }
+        // Réactiver
+        await sb.patch("client_affiliations",`id=eq.${existing[0].id}`,{actif:true});
+      } else {
+        await sb.post("client_affiliations",{id:uid(),client_id:session.client.id,restaurant_id:resto.id,affiliated_at:new Date().toISOString(),actif:true});
+      }
+      onDone(resto);
+    } catch(e){ setMsg({type:"error",text:e.message}); }
+    setLoading(false);
+  };
+
+  return (
+    <Sheet title="Rejoindre un restaurant" onClose={onClose}>
+      {msg.text && <div style={{background:msg.type==="error"?"rgba(239,68,68,.1)":"rgba(34,197,94,.1)",border:`1px solid ${msg.type==="error"?"rgba(239,68,68,.3)":"rgba(34,197,94,.3)"}`,borderRadius:12,padding:"10px 14px",marginBottom:14,color:msg.type==="error"?"#EF4444":"#22C55E",fontSize:13}}>{msg.text}</div>}
+      <Field label="Code restaurant">
+        <input className="c-inp" value={code} onChange={e=>setCode(e.target.value.toUpperCase())} placeholder="NXS-XXXX" style={{letterSpacing:"0.1em",fontWeight:700}}/>
+      </Field>
+      <div style={{marginBottom:14}}>
+        <button className="c-btn" onClick={doAffiliate} disabled={loading}>{loading?"Recherche...":"S'affilier"}</button>
+      </div>
+      <button className="c-btn c-btn-ghost" onClick={onClose}>Annuler</button>
+    </Sheet>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// MENU SCREEN
+// ═══════════════════════════════════════════════════════════════════
+function MenuScreen({ session, cart, onCartChange, onOpenCart }) {
+  const [menu, setMenu]      = useState([]);
+  const [categories, setCats] = useState([]);
+  const [selCat, setSelCat]  = useState("all");
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch]  = useState("");
+  const [resto, setResto]    = useState(null);
+
+  const rid = session.activeRestaurantId;
+
+  useEffect(() => {
+    if(!rid) return;
+    setLoading(true);
+    const r = session.restaurants?.find(r=>r.id===rid);
+    setResto(r);
+    // Charger le menu (table menu_items) — colonnes réelles : nom, prix, categorie, desactive, image
+    // Exclure la chicha (poste=chicha) : non disponible en commande à emporter
+    sb.get("menu_items", `restaurant_id=eq.${encodeURIComponent(rid)}&desactive=eq.false&or=(poste.is.null,poste.neq.chicha)&order=categorie.asc,nom.asc`)
+      .then(items => {
+        // Normaliser vers le format attendu par le rendu (name, price, category, image_url)
+        const normalized = (items||[]).map(p=>({id:p.id,name:p.nom,description:p.description,price:p.prix,category:p.categorie,image_url:p.image,service_id:p.service_id,available:!p.desactive}));
+        setMenu(normalized);
+        const cats = [...new Set(normalized.map(i=>i.category).filter(Boolean))];
+        setCats(cats);
+        setLoading(false);
+      })
+      .catch(()=>setLoading(false));
+  }, [rid]);
+
+  // Statut ouvert/fermé en temps réel (polling toutes les 20s + au montage)
+  useEffect(() => {
+    if(!rid) return;
+    let active = true;
+    const checkStatut = () => {
+      sb.get("restaurants", `id=eq.${encodeURIComponent(rid)}&select=id,nom,journee_ouverte,date_journee,orange_money_numero,telephone`)
+        .then(rows => { if(active && rows?.[0]) setResto(prev => ({...(prev||{}), ...rows[0]})); })
+        .catch(()=>{});
+    };
+    checkStatut();
+    const i = setInterval(checkStatut, 20000);
+    return () => { active = false; clearInterval(i); };
+  }, [rid]);
+
+  const filtered = useMemo(() => menu.filter(item => {
+    const matchCat = selCat==="all" || item.category===selCat;
+    const matchSearch = !search || (item.name||"").toLowerCase().includes(search.toLowerCase());
+    return matchCat && matchSearch;
+  }), [menu,selCat,search]);
+
+  const cartCount = cart.reduce((s,i)=>s+i.qty,0);
+  const cartTotal = cart.reduce((s,i)=>s+i.qty*i.price,0);
+
+  const getQty = (id) => cart.find(c=>c.id===id)?.qty || 0;
+
+  const changeQty = (item, delta) => {
+    const cur = cart.find(c=>c.id===item.id);
+    const newQty = (cur?.qty||0)+delta;
+    let newCart;
+    if(newQty<=0) newCart = cart.filter(c=>c.id!==item.id);
+    else if(cur) newCart = cart.map(c=>c.id===item.id?{...c,qty:newQty}:c);
+    else newCart = [...cart,{id:item.id,name:item.name,price:item.price,qty:1,service_id:item.service_id,category:item.category}];
+    onCartChange(newCart);
+  };
+
+  return (
+    <div style={{paddingBottom:140}}>
+      {/* Restaurant header */}
+      <div style={{background:"linear-gradient(180deg,rgba(245,166,35,.12) 0%,transparent 100%)",padding:"16px 20px 0",borderBottom:"1px solid rgba(255,255,255,.06)"}}>
+        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
+          <div style={{width:44,height:44,borderRadius:14,background:"linear-gradient(135deg,#F5A623,#D4891A)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>🍽</div>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontFamily:"Outfit,sans-serif",fontWeight:800,fontSize:18,color:"#F0F2F8",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{resto?.nom||"Restaurant"}</div>
+            {resto?.journee_ouverte
+              ? <div style={{fontSize:12,fontWeight:700,color:"#22C55E",marginTop:2,display:"flex",alignItems:"center",gap:5}}><span style={{width:8,height:8,borderRadius:"50%",background:"#22C55E",display:"inline-block"}}></span>Ouvert</div>
+              : <div style={{fontSize:12,fontWeight:700,color:"#EF4444",marginTop:2,display:"flex",alignItems:"center",gap:5}}><span style={{width:8,height:8,borderRadius:"50%",background:"#EF4444",display:"inline-block"}}></span>Fermé</div>
+            }
+          </div>
+          {resto?.telephone && (
+            <a href={`tel:${resto.telephone}`} title={"Appeler "+resto.telephone} style={{flexShrink:0,width:40,height:40,borderRadius:12,background:"rgba(245,166,35,.12)",border:"1px solid rgba(245,166,35,.3)",display:"flex",alignItems:"center",justifyContent:"center",color:"#F5A623",fontSize:18,textDecoration:"none"}}>📞</a>
+          )}
+        </div>
+        {/* Search */}
+        <div style={{position:"relative",marginBottom:14}}>
+          <span style={{position:"absolute",left:14,top:"50%",transform:"translateY(-50%)",color:"#5A6170",fontSize:15}}>🔍</span>
+          <input className="c-inp" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Rechercher un plat..." style={{paddingLeft:40,paddingTop:10,paddingBottom:10,fontSize:14}}/>
+        </div>
+        {/* Catégories */}
+        {categories.length>0 && (
+          <div className="resto-scroll" style={{margin:"0 -20px",padding:"0 20px 14px"}}>
+            {[{id:"all",l:"Tout"},...categories.map(c=>({id:c,l:c}))].map(cat=>(
+              <button key={cat.id} onClick={()=>setSelCat(cat.id)} style={{flexShrink:0,padding:"7px 16px",borderRadius:20,border:selCat===cat.id?"none":"1px solid rgba(255,255,255,.1)",background:selCat===cat.id?"#F5A623":"rgba(255,255,255,.05)",color:selCat===cat.id?"#080A0F":"#9CA3B0",fontWeight:700,fontSize:12,cursor:"pointer",whiteSpace:"nowrap",transition:"all .2s"}}>
+                {cat.l}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Menu items */}
+      <div style={{padding:"16px 16px 0"}}>
+        {loading && <Loader msg="Chargement du menu..."/>}
+        {!loading && filtered.length===0 && (
+          <div style={{textAlign:"center",padding:"48px 20px",color:"#5A6170",fontSize:14}}>
+            {search?"Aucun résultat pour \""+search+"\"":"Aucun article disponible"}
+          </div>
+        )}
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+          {filtered.map(item => {
+            const qty = getQty(item.id);
+            return (
+              <div key={item.id} className="menu-card" style={{animation:"fadeUp .3s ease"}}>
+                {item.image_url ? (
+                  <div style={{width:"100%",aspectRatio:"4/3",background:"#171A24",overflow:"hidden"}}>
+                    <img src={item.image_url} alt={item.name} style={{width:"100%",height:"100%",objectFit:"cover"}} onError={e=>e.target.style.display="none"}/>
+                  </div>
+                ) : (
+                  <div style={{width:"100%",aspectRatio:"4/3",background:"linear-gradient(135deg,#171A24,#1E2230)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:32}}>🍴</div>
+                )}
+                <div style={{padding:"10px 10px 12px",flex:1,display:"flex",flexDirection:"column",gap:4}}>
+                  <div style={{fontWeight:700,fontSize:13,color:"#F0F2F8",lineHeight:1.3}}>{item.name}</div>
+                  {item.description && <div style={{fontSize:11,color:"#5A6170",lineHeight:1.4,flex:1}}>{item.description.slice(0,60)}{item.description.length>60?"…":""}</div>}
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:6}}>
+                    <span style={{fontFamily:"Outfit,sans-serif",fontWeight:800,fontSize:13,color:"#F5A623"}}>{fmt(item.price)}</span>
+                    {qty===0 ? (
+                      <button onClick={()=>changeQty(item,1)} style={{width:32,height:32,borderRadius:10,background:"#F5A623",border:"none",cursor:"pointer",color:"#080A0F",fontWeight:800,fontSize:18,display:"flex",alignItems:"center",justifyContent:"center"}}>+</button>
+                    ) : (
+                      <div className="qty-pill">
+                        <button className="qty-btn" onClick={()=>changeQty(item,-1)}>−</button>
+                        <span className="qty-val">{qty}</span>
+                        <button className="qty-btn" onClick={()=>changeQty(item,1)}>+</button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Panier flottant */}
+      {cartCount>0 && (
+        <div style={{position:"fixed",bottom:72,left:"50%",transform:"translateX(-50%)",width:"calc(100% - 32px)",maxWidth:468,zIndex:400,animation:"fadeUp .3s ease"}}>
+          <button onClick={onOpenCart} style={{width:"100%",background:"linear-gradient(135deg,#F5A623,#D4891A)",border:"none",borderRadius:16,padding:"14px 20px",display:"flex",alignItems:"center",justifyContent:"space-between",cursor:"pointer",boxShadow:"0 8px 32px rgba(245,166,35,.4)"}}>
+            <div style={{display:"flex",alignItems:"center",gap:10}}>
+              <span style={{background:"rgba(0,0,0,.2)",borderRadius:8,padding:"4px 9px",fontWeight:800,fontSize:13,color:"#fff"}}>{cartCount}</span>
+              <span style={{fontWeight:700,fontSize:14,color:"#080A0F",fontFamily:"Outfit,sans-serif"}}>Voir le panier</span>
+            </div>
+            <span style={{fontWeight:800,fontSize:14,color:"#080A0F",fontFamily:"Outfit,sans-serif"}}>{fmt(cartTotal)}</span>
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// PANIER
+// ═══════════════════════════════════════════════════════════════════
+function CartSheet({ session, cart, onCartChange, onClose, onOrder }) {
+  const total = cart.reduce((s,i)=>s+i.qty*i.price,0);
+  const [mode, setMode]   = useState("sur_place"); // sur_place | orange_money
+  const [note, setNote]   = useState("");
+  const [loading, setLoading] = useState(false);
+  const restoBase = session.restaurants?.find(r=>r.id===session.activeRestaurantId);
+  const [orangeNum, setOrangeNum] = useState(restoBase?.orange_money_numero||null);
+  const [isOpen, setIsOpen] = useState(restoBase?.journee_ouverte !== false);
+  const resto = {...(restoBase||{}), orange_money_numero: orangeNum};
+
+  useEffect(()=>{
+    const rid = session.activeRestaurantId;
+    if(!rid) return;
+    const check = () => sb.get("restaurants", `id=eq.${encodeURIComponent(rid)}&select=orange_money_numero,journee_ouverte`)
+      .then(rows=>{ if(rows?.[0]){ if(rows[0].orange_money_numero) setOrangeNum(rows[0].orange_money_numero); setIsOpen(rows[0].journee_ouverte !== false); } })
+      .catch(()=>{});
+    check();
+    const i = setInterval(check, 20000);
+    return () => clearInterval(i);
+  },[session.activeRestaurantId]);
+
+  const changeQty = (id, delta) => {
+    const newCart = cart.map(c=>c.id===id?{...c,qty:Math.max(0,c.qty+delta)}:c).filter(c=>c.qty>0);
+    onCartChange(newCart);
+  };
+
+  const doOrder = async () => {
+    if(!cart.length) return;
+    if(!isOpen){ alert("🔴 Le restaurant est actuellement fermé. Vous ne pouvez pas commander pour le moment."); return; }
+    setLoading(true);
+    try {
+      await onOrder({ cart, mode, total, note: note.trim() });
+      onClose();
+    } catch(e){ alert("Erreur : "+e.message); }
+    setLoading(false);
+  };
+
+  return (
+    <Sheet title="🛒 Mon panier" onClose={onClose}>
+      {cart.length===0 ? (
+        <div style={{textAlign:"center",padding:"32px 0",color:"#5A6170"}}>
+          <div style={{fontSize:40,marginBottom:12}}>🛒</div>
+          <div>Votre panier est vide</div>
+        </div>
+      ) : (
+        <>
+          <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:20}}>
+            {cart.map(item=>(
+              <div key={item.id} style={{display:"flex",alignItems:"center",gap:12,background:"#171A24",borderRadius:12,padding:"12px 14px"}}>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontWeight:700,fontSize:14,color:"#F0F2F8"}}>{item.name}</div>
+                  <div style={{fontSize:12,color:"#F5A623",fontWeight:700,marginTop:2}}>{fmt(item.price)}</div>
+                </div>
+                <div className="qty-pill">
+                  <button className="qty-btn" onClick={()=>changeQty(item.id,-1)}>−</button>
+                  <span className="qty-val">{item.qty}</span>
+                  <button className="qty-btn" onClick={()=>changeQty(item.id,1)}>+</button>
+                </div>
+                <div style={{fontWeight:800,fontSize:13,color:"#F0F2F8",minWidth:70,textAlign:"right"}}>{fmt(item.qty*item.price)}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Total */}
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",background:"rgba(245,166,35,.08)",border:"1px solid rgba(245,166,35,.2)",borderRadius:12,padding:"14px 16px",marginBottom:20}}>
+            <span style={{fontWeight:700,color:"#9CA3B0"}}>Total</span>
+            <span style={{fontFamily:"Outfit,sans-serif",fontWeight:900,fontSize:20,color:"#F5A623"}}>{fmt(total)}</span>
+          </div>
+
+          {/* Note pour la cuisine */}
+          <div style={{marginBottom:20}}>
+            <div style={{fontSize:11,fontWeight:700,color:"#5A6170",textTransform:"uppercase",letterSpacing:".6px",marginBottom:10}}>📝 Note pour la cuisine (optionnel)</div>
+            <textarea value={note} onChange={e=>setNote(e.target.value.slice(0,200))} placeholder="Ex: pas de piment, sans oignon..." rows={2} style={{width:"100%",background:"#171A24",border:"1px solid rgba(255,255,255,.08)",borderRadius:12,padding:"12px 14px",color:"#F0F2F8",fontSize:13,fontFamily:"inherit",resize:"none",boxSizing:"border-box"}}/>
+            <div style={{fontSize:10,color:"#5A6170",marginTop:4,textAlign:"right"}}>{note.length}/200</div>
+          </div>
+
+          {/* Mode paiement */}
+          <div style={{marginBottom:20}}>
+            <div style={{fontSize:11,fontWeight:700,color:"#5A6170",textTransform:"uppercase",letterSpacing:".6px",marginBottom:10}}>Mode de paiement</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+              {[{id:"sur_place",icon:"💵",label:"Sur place"},{id:"orange_money",icon:"📱",label:"Orange Money"}].map(m=>(
+                <button key={m.id} onClick={()=>setMode(m.id)} style={{padding:"14px 10px",borderRadius:14,border:mode===m.id?"2px solid #F5A623":"1px solid rgba(255,255,255,.1)",background:mode===m.id?"rgba(245,166,35,.12)":"rgba(255,255,255,.04)",color:mode===m.id?"#F5A623":"#9CA3B0",fontWeight:700,fontSize:13,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:6,transition:"all .2s"}}>
+                  <span style={{fontSize:22}}>{m.icon}</span>
+                  {m.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Orange Money info */}
+          {mode==="orange_money" && (
+            resto?.orange_money_numero ? (
+              <div style={{background:"rgba(255,140,0,.08)",border:"1px solid rgba(255,140,0,.25)",borderRadius:14,padding:"14px 16px",marginBottom:20}}>
+                <div style={{fontWeight:700,color:"#F5A623",marginBottom:8,fontSize:14}}>📱 Envoyez le montant exact</div>
+                <div style={{fontSize:13,color:"#9CA3B0",lineHeight:1.7}}>
+                  Numéro Orange Money :<br/>
+                  <strong style={{color:"#F0F2F8",fontSize:20,fontFamily:"Outfit,sans-serif",letterSpacing:"0.05em"}}>{resto.orange_money_numero}</strong><br/>
+                  <strong style={{color:"#F5A623"}}>{fmt(total)}</strong><br/>
+                  <span style={{fontSize:12,color:"#5A6170"}}>Votre commande sera validée après confirmation du paiement.</span>
+                </div>
+              </div>
+            ) : (
+              <div style={{background:"rgba(239,68,68,.08)",border:"1px solid rgba(239,68,68,.25)",borderRadius:14,padding:"14px 16px",marginBottom:20}}>
+                <div style={{fontSize:13,color:"#fca5a5",lineHeight:1.6}}>⚠️ Le restaurant n'a pas encore renseigné son numéro Orange Money. Choisissez « Sur place » ou contactez le restaurant.</div>
+              </div>
+            )
+          )}
+
+          {!isOpen && (
+            <div style={{background:"rgba(239,68,68,.08)",border:"1px solid rgba(239,68,68,.25)",borderRadius:14,padding:"14px 16px",marginBottom:16}}>
+              <div style={{fontSize:13,color:"#fca5a5",lineHeight:1.6,fontWeight:600}}>🔴 Le restaurant est actuellement fermé. Vous ne pouvez pas finaliser votre commande pour le moment. Vous pouvez préparer votre panier et commander dès la réouverture.</div>
+            </div>
+          )}
+
+          <button className="c-btn" onClick={doOrder} disabled={loading||!isOpen} style={!isOpen?{opacity:0.5,cursor:"not-allowed"}:{}}>
+            {!isOpen ? "🔴 Restaurant fermé" : loading?"Envoi en cours...":"✅ Commander — "+fmt(total)}
+          </button>
+        </>
+      )}
+    </Sheet>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// SUIVI COMMANDE
+// ═══════════════════════════════════════════════════════════════════
+function OrderTracker({ orderId, onClose, onConfirmRecovered }) {
+  const [order, setOrder] = useState(null);
+  const [resto, setResto] = useState(null);
+  const [paid, setPaid] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [confirming, setConfirming] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      const rows = await sb.get("orders", `id=eq.${orderId}&select=id,statut,total,created_at,motif_rejet,client_nom,mode_paiement_client,items,table_id,restaurant_id,note`);
+      if(rows?.length) {
+        const o = rows[0];
+        setOrder(o);
+        // Charger le téléphone du restaurant et vérifier si un paiement existe pour cette table
+        try {
+          const [rRows, pRows] = await Promise.all([
+            sb.get("restaurants", `id=eq.${encodeURIComponent(o.restaurant_id)}&select=telephone,nom`),
+            o.table_id ? sb.get("payments", `table_id=eq.${encodeURIComponent(o.table_id)}&select=id`) : Promise.resolve([]),
+          ]);
+          if(rRows?.[0]) setResto(rRows[0]);
+          setPaid((pRows||[]).length > 0);
+        } catch(e){}
+      }
+    } catch(e){}
+    setLoading(false);
+  }, [orderId]);
+
+  useEffect(() => {
+    load();
+    // Polling toutes les 12 secondes
+    const interval = setInterval(load, 12000);
+    return () => clearInterval(interval);
+  }, [load]);
+
+  const STEPS = [
+    {id:"en_attente",label:"En attente de validation",icon:"⏳"},
+    {id:"en_preparation",label:"En préparation",icon:"👨‍🍳"},
+    {id:"pret",label:"Commande prête !",icon:"🎉"},
+  ];
+
+  const statutNorm = order?.statut==="waiting_client" ? "pret" : order?.statut;
+  const isPret = statutNorm === "pret";
+  const statutIdx = order ? STEPS.findIndex(s=>s.id===statutNorm) : -1;
+  const isRejetee = order?.statut==="rejete" || order?.statut==="annule";
+  const canConfirmRecovery = isPret && paid && order?.table_id;
+
+  const handleConfirmRecovery = async () => {
+    if(confirming) return;
+    setConfirming(true);
+    try {
+      // Supprimer les commandes liées à la table, puis la table elle-même (paiements conservés)
+      await sb.del("orders", `table_id=eq.${encodeURIComponent(order.table_id)}`);
+      await sb.del("tables", `id=eq.${encodeURIComponent(order.table_id)}`);
+      if(onConfirmRecovered) onConfirmRecovered();
+      onClose();
+    } catch(e){ alert("Erreur : "+(e.message||"impossible de confirmer")); }
+    setConfirming(false);
+  };
+
+  return (
+    <Sheet title="Suivi commande" onClose={onClose}>
+      {loading && <Loader msg="Chargement..."/>}
+      {!loading && order && (
+        <>
+          <div style={{background:"#171A24",borderRadius:14,padding:"14px 16px",marginBottom:20}}>
+            <div style={{fontSize:11,color:"#5A6170",marginBottom:4}}>Commande #{order.id?.slice(-6).toUpperCase()}</div>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <StatusBadge statut={order.statut}/>
+              <span style={{fontFamily:"Outfit,sans-serif",fontWeight:800,fontSize:17,color:"#F5A623"}}>{fmt(order.total)}</span>
+            </div>
+          </div>
+
+          {isRejetee ? (
+            <div style={{background:"rgba(239,68,68,.08)",border:"1px solid rgba(239,68,68,.25)",borderRadius:14,padding:"14px 16px",marginBottom:20}}>
+              <div style={{fontWeight:700,color:"#EF4444",marginBottom:4}}>❌ Commande refusée</div>
+              {order.motif_rejet && <div style={{fontSize:13,color:"#9CA3B0"}}>{order.motif_rejet}</div>}
+            </div>
+          ) : (
+            <div className="timeline" style={{marginBottom:20,paddingLeft:4}}>
+              {STEPS.map((step,i)=>{
+                const isLast = i === STEPS.length-1;
+                // Quand statut=pret et qu'on est sur la dernière étape : marquer comme done (terminé)
+                const done   = statutIdx > i || (isLast && isPret);
+                const active = statutIdx === i && !(isLast && isPret);
+                const future = statutIdx < i;
+                return (
+                  <div key={step.id} className="tl-step">
+                    <div className="tl-dot">
+                      <div className="tl-circle" style={{background:done?"#22C55E":active?"#F5A623":"rgba(255,255,255,.08)",color:done||active?"#fff":"#5A6170",boxShadow:active?"0 0 12px rgba(245,166,35,.4)":"none",transition:"all .4s"}}>
+                        {done?"✓":step.icon}
+                      </div>
+                      {i<STEPS.length-1 && <div className="tl-line" style={{background:done?"#22C55E33":"rgba(255,255,255,.08)"}}/>}
+                    </div>
+                    <div className="tl-content">
+                      <div style={{fontWeight:active||(isLast && isPret)?700:500,color:future?"#5A6170":done?"#22C55E":active?"#F5A623":"#F0F2F8",fontSize:14,transition:"color .3s"}}>{step.label}</div>
+                      {active && <div style={{fontSize:11,color:"#9CA3B0",marginTop:2,animation:"pulse 2s infinite"}}>En cours...</div>}
+                      {isLast && isPret && <div style={{fontSize:12,color:"#22C55E",marginTop:3,fontWeight:600}}>🛍️ Venez chercher votre commande</div>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Bouton confirmation récupération (visible uniquement si pret + payée) */}
+          {canConfirmRecovery && (
+            <button onClick={handleConfirmRecovery} disabled={confirming} style={{width:"100%",background:"linear-gradient(135deg,#22C55E,#16A34A)",border:"none",borderRadius:14,padding:"14px 16px",color:"#fff",fontWeight:800,fontSize:14,cursor:confirming?"wait":"pointer",marginBottom:16,boxShadow:"0 6px 20px rgba(34,197,94,.3)",opacity:confirming?0.6:1}}>
+              {confirming?"Confirmation...":"🛍️ J'ai récupéré ma commande"}
+            </button>
+          )}
+
+          {/* Téléphone restaurant */}
+          {resto?.telephone && !isRejetee && (
+            <a href={`tel:${resto.telephone}`} style={{display:"flex",alignItems:"center",gap:10,background:"rgba(245,166,35,.08)",border:"1px solid rgba(245,166,35,.2)",borderRadius:14,padding:"12px 16px",marginBottom:16,textDecoration:"none",color:"#F0F2F8"}}>
+              <span style={{fontSize:18}}>📞</span>
+              <div style={{flex:1}}>
+                <div style={{fontSize:11,color:"#9CA3B0"}}>Appeler le restaurant</div>
+                <div style={{fontSize:14,fontWeight:700,color:"#F5A623"}}>{resto.telephone}</div>
+              </div>
+            </a>
+          )}
+
+          {/* Note du client */}
+          {order.note && (
+            <div style={{background:"rgba(96,165,250,.08)",border:"1px solid rgba(96,165,250,.2)",borderRadius:14,padding:"12px 16px",marginBottom:16}}>
+              <div style={{fontSize:11,color:"#9CA3B0",marginBottom:4}}>📝 Votre note</div>
+              <div style={{fontSize:13,color:"#F0F2F8"}}>{order.note}</div>
+            </div>
+          )}
+
+          {/* Détail articles */}
+          {order.items?.length>0 && (
+            <div style={{marginBottom:16}}>
+              <div style={{fontSize:12,fontWeight:700,color:"#5A6170",textTransform:"uppercase",letterSpacing:".5px",marginBottom:10}}>Articles commandés</div>
+              {order.items.map((item,i)=>(
+                <div key={i} style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid rgba(255,255,255,.05)"}}>
+                  <span style={{fontSize:13,color:"#9CA3B0"}}>{item.quantite}× {item.nom}</span>
+                  <span style={{fontSize:13,fontWeight:700,color:"#F0F2F8"}}>{fmt((item.prix||0)*item.quantite)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </Sheet>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// HISTORIQUE DES COMMANDES
+// ═══════════════════════════════════════════════════════════════════
+function HistoriqueScreen({ session }) {
+  const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [tracked, setTracked] = useState(null);
+
+  const rid = session.activeRestaurantId;
+
+  useEffect(()=>{
+    setLoading(true);
+    sb.get("orders",`restaurant_id=eq.${encodeURIComponent(rid)}&client_id=eq.${encodeURIComponent(session.client.id)}&order=created_at.desc&limit=50&select=id,statut,total,created_at,motif_rejet,mode_paiement_client`)
+      .then(r=>{ setOrders(r||[]); setLoading(false); })
+      .catch(()=>setLoading(false));
+  },[rid,session.client.id]);
+
+  return (
+    <div style={{padding:"20px 16px",paddingBottom:100}}>
+      <h2 style={{fontFamily:"Outfit,sans-serif",fontSize:22,fontWeight:800,marginBottom:20,color:"#F0F2F8"}}>Mes commandes</h2>
+      {loading && <Loader/>}
+      {!loading && orders.length===0 && (
+        <div style={{textAlign:"center",padding:"48px 20px",color:"#5A6170"}}>
+          <div style={{fontSize:44,marginBottom:12}}>📋</div>
+          <div style={{fontSize:15,fontWeight:600,marginBottom:6}}>Aucune commande</div>
+          <div style={{fontSize:13}}>Vos commandes apparaîtront ici</div>
+        </div>
+      )}
+      <div style={{display:"flex",flexDirection:"column",gap:12}}>
+        {orders.map(o=>(
+          <div key={o.id} onClick={()=>setTracked(o.id)} className="c-card" style={{cursor:"pointer",transition:"border-color .2s",animation:"fadeUp .3s ease"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
+              <div>
+                <div style={{fontWeight:700,fontSize:14,color:"#F0F2F8"}}>Commande #{o.id?.slice(-6).toUpperCase()}</div>
+                <div style={{fontSize:11,color:"#5A6170",marginTop:3}}>{fmtDate(o.created_at)}</div>
+              </div>
+              <span style={{fontFamily:"Outfit,sans-serif",fontWeight:800,color:"#F5A623",fontSize:15}}>{fmt(o.total)}</span>
+            </div>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <StatusBadge statut={o.statut}/>
+              <span style={{fontSize:11,color:"#5A6170"}}>{o.mode_paiement_client==="orange_money"?"📱 Orange Money":"💵 Sur place"}</span>
+            </div>
+            {o.motif_rejet && <div style={{marginTop:10,fontSize:12,color:"#EF4444",background:"rgba(239,68,68,.08)",borderRadius:8,padding:"6px 10px"}}>Motif : {o.motif_rejet}</div>}
+          </div>
+        ))}
+      </div>
+      {tracked && <OrderTracker orderId={tracked} onClose={()=>setTracked(null)}/>}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// NOTIFICATIONS
+// ═══════════════════════════════════════════════════════════════════
+function NotificationsScreen({ session }) {
+  const [notifs, setNotifs] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(()=>{
+    sb.get("client_notifications",`client_id=eq.${encodeURIComponent(session.client.id)}&order=created_at.desc&limit=50`)
+      .then(r=>{ setNotifs(r||[]); setLoading(false); })
+      .catch(()=>{ setNotifs([]); setLoading(false); });
+  },[session.client.id]);
+
+  return (
+    <div style={{padding:"20px 16px",paddingBottom:100}}>
+      <h2 style={{fontFamily:"Outfit,sans-serif",fontSize:22,fontWeight:800,marginBottom:20,color:"#F0F2F8"}}>Notifications</h2>
+      {loading && <Loader/>}
+      {!loading && notifs.length===0 && (
+        <div style={{textAlign:"center",padding:"48px 20px",color:"#5A6170"}}>
+          <div style={{fontSize:44,marginBottom:12}}>🔔</div>
+          <div style={{fontSize:15,fontWeight:600,marginBottom:6}}>Aucune notification</div>
+          <div style={{fontSize:13}}>Vous serez notifié ici lorsque vos commandes changent de statut</div>
+        </div>
+      )}
+      <div style={{display:"flex",flexDirection:"column",gap:10}}>
+        {notifs.map(n=>(
+          <div key={n.id} className="c-card" style={{borderColor:n.lu?"rgba(255,255,255,.07)":"rgba(245,166,35,.3)",background:n.lu?"#0F1118":"rgba(245,166,35,.05)"}}>
+            <div style={{display:"flex",gap:12,alignItems:"flex-start"}}>
+              <span style={{fontSize:22,flexShrink:0}}>{n.icon||"🔔"}</span>
+              <div style={{flex:1}}>
+                <div style={{fontWeight:n.lu?500:700,fontSize:14,color:"#F0F2F8",marginBottom:3}}>{n.titre||n.message}</div>
+                {n.corps && <div style={{fontSize:12,color:"#9CA3B0",lineHeight:1.5}}>{n.corps}</div>}
+                <div style={{fontSize:11,color:"#5A6170",marginTop:6}}>{fmtDate(n.created_at)}</div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// PROFIL
+// ═══════════════════════════════════════════════════════════════════
+function ProfilScreen({ session, onLogout, onSessionUpdate }) {
+  const { client, restaurants, affiliations } = session;
+  const [showAffiliate, setShowAffiliate] = useState(false);
+  const [confirmLogout, setConfirmLogout] = useState(false);
+  const [toast, setToast] = useState(null);
+
+  const nomComplet = `${client.prenom||""} ${client.nom||""}`.trim();
+
+  const handleNewAffi = (resto) => {
+    const newSession = {
+      ...session,
+      affiliations:[...affiliations,{restaurant_id:resto.id,affiliated_at:new Date().toISOString(),actif:true}],
+      restaurants:[...(restaurants||[]),resto]
+    };
+    setSession(newSession);
+    onSessionUpdate(newSession);
+    setShowAffiliate(false);
+    setToast("Affilié à "+resto.nom+" !");
+  };
+
+  return (
+    <div style={{padding:"20px 16px",paddingBottom:100}}>
+      <h2 style={{fontFamily:"Outfit,sans-serif",fontSize:22,fontWeight:800,marginBottom:20,color:"#F0F2F8"}}>Mon profil</h2>
+
+      {/* Avatar + Infos */}
+      <div style={{background:"linear-gradient(135deg,rgba(245,166,35,.15),rgba(245,166,35,.05))",border:"1px solid rgba(245,166,35,.2)",borderRadius:20,padding:"22px",marginBottom:20,textAlign:"center"}}>
+        <div style={{width:72,height:72,borderRadius:22,background:"linear-gradient(135deg,#F5A623,#D4891A)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:32,margin:"0 auto 14px",boxShadow:"0 4px 20px rgba(245,166,35,.3)"}}>
+          {(client.prenom||"U").charAt(0).toUpperCase()}
+        </div>
+        <div style={{fontFamily:"Outfit,sans-serif",fontWeight:800,fontSize:20,color:"#F0F2F8"}}>{nomComplet}</div>
+        <div style={{fontSize:13,color:"#9CA3B0",marginTop:5}}>📞 {client.telephone}</div>
+      </div>
+
+      {/* Mes restaurants */}
+      <div style={{marginBottom:20}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+          <div style={{fontFamily:"Outfit,sans-serif",fontWeight:700,fontSize:16,color:"#F0F2F8"}}>🍽 Mes restaurants</div>
+          <button onClick={()=>setShowAffiliate(true)} style={{background:"rgba(245,166,35,.12)",border:"1px solid rgba(245,166,35,.25)",borderRadius:10,padding:"6px 12px",cursor:"pointer",color:"#F5A623",fontWeight:700,fontSize:12}}>+ Ajouter</button>
+        </div>
+        <div style={{display:"flex",flexDirection:"column",gap:10}}>
+          {(restaurants||[]).map(r=>(
+            <div key={r.id} className="c-card" style={{display:"flex",alignItems:"center",gap:12}}>
+              <div style={{width:44,height:44,borderRadius:14,background:"linear-gradient(135deg,#F5A623,#D4891A)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>🍽</div>
+              <div style={{flex:1}}>
+                <div style={{fontWeight:700,color:"#F0F2F8",fontSize:14}}>{r.nom}</div>
+                <div style={{fontSize:11,color:"#5A6170",marginTop:2}}>Code : {r.code}</div>
+              </div>
+              {r.id===session.activeRestaurantId && <span className="c-badge" style={{background:"rgba(34,197,94,.15)",color:"#22C55E"}}>Actif</span>}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Service client NexaServe */}
+      <a href="https://wa.me/224620764405" target="_blank" rel="noopener noreferrer"
+        style={{textDecoration:"none",display:"flex",alignItems:"center",justifyContent:"center",gap:8,width:"100%",padding:"14px",borderRadius:14,fontWeight:700,fontSize:14,fontFamily:"Outfit,sans-serif",background:"rgba(34,197,94,.15)",color:"#22C55E",border:"1px solid rgba(34,197,94,.3)",marginBottom:12}}>
+        💬 Contacter le service client NexaServe
+      </a>
+
+      {/* Déconnexion */}
+      <button className="c-btn c-btn-danger" onClick={()=>setConfirmLogout(true)} style={{width:"100%",padding:"14px",borderRadius:14,fontWeight:700,fontSize:14,cursor:"pointer",fontFamily:"Outfit,sans-serif"}}>
+        🚪 Se déconnecter
+      </button>
+
+      {confirmLogout && (
+        <Sheet title="Se déconnecter" onClose={()=>setConfirmLogout(false)}>
+          <p style={{fontSize:14,color:"#9CA3B0",lineHeight:1.6,marginBottom:20}}>Voulez-vous vraiment vous déconnecter de votre compte ?</p>
+          <div style={{display:"flex",gap:10,marginBottom:8}}>
+            <button className="c-btn c-btn-ghost" onClick={()=>setConfirmLogout(false)} style={{flex:1,padding:"13px",borderRadius:12,fontWeight:700,fontSize:14,cursor:"pointer",fontFamily:"Outfit,sans-serif"}}>Annuler</button>
+            <button className="c-btn c-btn-danger" onClick={onLogout} style={{flex:1,padding:"13px",borderRadius:12,fontWeight:700,fontSize:14,cursor:"pointer",fontFamily:"Outfit,sans-serif"}}>Se déconnecter</button>
+          </div>
+        </Sheet>
+      )}
+
+      {showAffiliate && <AffiliationSheet session={session} onDone={handleNewAffi} onClose={()=>setShowAffiliate(false)}/>}
+      {toast && <Toast msg={toast} icon="✅" onDone={()=>setToast(null)}/>}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// RESTAURANT SWITCHER (header bar)
+// ═══════════════════════════════════════════════════════════════════
+function RestaurantSwitcher({ session, onSwitch }) {
+  const { restaurants=[], activeRestaurantId } = session;
+  if(restaurants.length<=1) return null;
+  return (
+    <div className="resto-scroll" style={{background:"#080A0F",borderBottom:"1px solid rgba(255,255,255,.06)",paddingTop:10,paddingBottom:10}}>
+      {restaurants.map(r=>(
+        <button key={r.id} onClick={()=>onSwitch(r.id)} style={{flexShrink:0,padding:"8px 16px",borderRadius:20,border:r.id===activeRestaurantId?"2px solid #F5A623":"1px solid rgba(255,255,255,.1)",background:r.id===activeRestaurantId?"rgba(245,166,35,.12)":"rgba(255,255,255,.05)",color:r.id===activeRestaurantId?"#F5A623":"#9CA3B0",fontWeight:700,fontSize:12,cursor:"pointer",whiteSpace:"nowrap",transition:"all .2s"}}>
+          🍽 {r.nom}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// APP PRINCIPALE
+// ═══════════════════════════════════════════════════════════════════
+function MainApp({ session: initialSession, onLogout }) {
+  const [session, setSessionState] = useState(initialSession);
+  const [tab, setTab]   = useState("menu");
+  const [cart, setCart] = useState(() => getCart(initialSession.activeRestaurantId));
+  const [showCart, setShowCart] = useState(false);
+  const [tracked, setTracked]   = useState(null);
+  const [toast, setToast]        = useState(null);
+  const [notifCount, setNotifCount] = useState(0);
+
+  const rid = session.activeRestaurantId;
+
+  // Recharger panier quand restaurant change
+  const handleSwitch = (newRid) => {
+    saveCart(rid, cart);
+    const newSession = { ...session, activeRestaurantId: newRid };
+    setSession(newSession);
+    setSessionState(newSession);
+    setCart(getCart(newRid));
+    setTab("menu");
+  };
+
+  const handleSessionUpdate = (newSession) => {
+    setSessionState(newSession);
+  };
+
+  const handleCartChange = (newCart) => {
+    setCart(newCart);
+    saveCart(rid, newCart);
+  };
+
+  const handleOrder = async ({ cart, mode, total, note }) => {
+    const client = session.client;
+    const nomComplet = `${client.prenom||""} ${client.nom||""}`.trim();
+    // Vérifier que le compte n'a pas été suspendu par le restaurant
+    try {
+      const chk = await sb.get("clients", `id=eq.${client.id}&select=actif`);
+      if(chk?.[0]?.actif===false){ setToast("⛔ Votre compte a été suspendu par le restaurant. Veuillez les contacter."); return; }
+    } catch(e){}
+    // Vérifier que le restaurant est ouvert (temps réel)
+    try {
+      const rchk = await sb.get("restaurants", `id=eq.${rid}&select=journee_ouverte`);
+      if(rchk?.[0]?.journee_ouverte===false){ setToast("🔴 Le restaurant est actuellement fermé. Réessayez quand il sera ouvert."); return; }
+    } catch(e){}
+    // Articles de la commande (stockés en jsonb dans orders.items) — format écosystème : nom/prix/quantite
+    const items = cart.map(c=>({
+      nom: c.name,
+      prix: c.price,
+      quantite: c.qty,
+      service_id: c.service_id||null,
+    }));
+    // 1) Générer le numéro de commande à emporter (atomique, partagé avec l'app restaurant)
+    let emNum = null;
+    try { const n = await sb.rpc("next_em_num", { p_restaurant_id: rid }); emNum = Array.isArray(n)?n[0]:n; } catch(e){}
+    // 2) Créer la table virtuelle "à emporter" (orders.table_id est NOT NULL)
+    const tableBody = {
+      id: uid(),
+      restaurant_id: rid,
+      is_takeaway: true,
+      statut: "occupee",
+      em_num: emNum,
+      client_nom: nomComplet,
+    };
+    const tableRows = await sb.post("tables", tableBody);
+    const tableId = tableRows?.[0]?.id || tableBody.id;
+    // 3) Créer la commande dans la table orders
+    const orderBody = {
+      id: uid(),
+      restaurant_id: rid,
+      table_id: tableId,
+      is_takeaway: true,
+      statut: "en_attente",
+      total: total,
+      items: items,
+      client_id: client.id,
+      is_client_order: true,
+      client_nom: nomComplet,
+      client_telephone: client.telephone,
+      mode_paiement_client: mode,
+      note: note || null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    // Insérer la commande
+    const orderRows = await sb.post("orders", orderBody);
+    const orderId = orderRows?.[0]?.id || orderBody.id;
+    // Vider le panier
+    handleCartChange([]);
+    setToast("✅ Commande envoyée !");
+    setTracked(orderId);
+    setTab("historique");
+  };
+
+  // Compter les notifs non lues
+  useEffect(()=>{
+    sb.get("client_notifications",`client_id=eq.${encodeURIComponent(session.client.id)}&lu=eq.false&select=id`)
+      .then(r=>setNotifCount(r?.length||0))
+      .catch(()=>{});
+    const i = setInterval(()=>{
+      sb.get("client_notifications",`client_id=eq.${encodeURIComponent(session.client.id)}&lu=eq.false&select=id`)
+        .then(r=>setNotifCount(r?.length||0)).catch(()=>{});
+    },30000);
+    return ()=>clearInterval(i);
+  },[session.client.id]);
+
+  const cartCount = cart.reduce((s,i)=>s+i.qty,0);
+
+  const TABS = [
+    { id:"menu",       icon:"🍽",  label:"Menu"          },
+    { id:"historique", icon:"📋",  label:"Commandes"     },
+    { id:"notifs",     icon:"🔔",  label:"Notifs",  badge:notifCount },
+    { id:"profil",     icon:"👤",  label:"Profil"        },
+  ];
+
+  return (
+    <div style={{maxWidth:500,margin:"0 auto",minHeight:"100vh",background:"#080A0F",display:"flex",flexDirection:"column",position:"relative"}}>
+      <style>{GLOBAL_CSS}</style>
+      <OfflineBanner/>
+
+      {/* Restaurant switcher si plusieurs */}
+      {session.restaurants?.length>1 && (
+        <RestaurantSwitcher session={session} onSwitch={handleSwitch}/>
+      )}
+
+      {/* Contenu */}
+      <div style={{flex:1,overflowY:"auto",paddingTop:4}}>
+        {tab==="menu"       && <MenuScreen session={session} cart={cart} onCartChange={handleCartChange} onOpenCart={()=>setShowCart(true)}/>}
+        {tab==="historique" && <HistoriqueScreen session={session}/>}
+        {tab==="notifs"     && <NotificationsScreen session={session}/>}
+        {tab==="profil"     && <ProfilScreen session={session} onLogout={onLogout} onSessionUpdate={handleSessionUpdate}/>}
+      </div>
+
+      {/* Nav bar */}
+      <nav className="nav-bar">
+        {TABS.map(t=>{
+          const active = tab===t.id;
+          return (
+            <button key={t.id} className="nav-item" onClick={()=>setTab(t.id)}>
+              <div className="nav-icon" style={{background:active?"rgba(245,166,35,.18)":"transparent"}}>
+                <span style={{fontSize:20}}>{t.icon}</span>
+              </div>
+              <span className="nav-label" style={{color:active?"#F5A623":"#5A6170"}}>{t.label}</span>
+              {t.badge>0 && <span className="nav-badge">{t.badge}</span>}
+            </button>
+          );
+        })}
+      </nav>
+
+      {/* Cart sheet */}
+      {showCart && (
+        <CartSheet session={session} cart={cart} onCartChange={handleCartChange} onClose={()=>setShowCart(false)} onOrder={handleOrder}/>
+      )}
+
+      {/* Order tracker */}
+      {tracked && <OrderTracker orderId={tracked} onClose={()=>setTracked(null)} onConfirmRecovered={()=>setToast("✅ Bonne dégustation !")}/>}
+
+      {/* Toast */}
+      {toast && <Toast msg={toast} onDone={()=>setToast(null)}/>}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// ROOT
+// ═══════════════════════════════════════════════════════════════════
+function App() {
+  const [splash,   setSplash]   = useState(true);
+  const [session,  setSessionSt] = useState(null);
+  const [loading,  setLoading]  = useState(true);
+
+  useEffect(() => {
+    const stored = getSession();
+    setSessionSt(stored);
+    setLoading(false);
+  }, []);
+
+  const handleAuth = (s) => {
+    setSession(s);
+    setSessionSt(s);
+  };
+
+  const handleLogout = () => {
+    clearSession();
+    setSessionSt(null);
+  };
+
+  if(splash) return <SplashScreen onDone={()=>setSplash(false)}/>;
+  if(loading) return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#080A0F"}}><Spinner/></div>;
+  if(!session) return <AuthPage onAuth={handleAuth}/>;
+  return <MainApp session={session} onLogout={handleLogout}/>;
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+
+<!-- PWA Service Worker -->
+<script>
+if("serviceWorker" in navigator){
+  window.addEventListener("load",()=>{
+    const sw=`
+const CACHE="nxsc-v1";
+const ASSETS=["/client.html","/"];
+self.addEventListener("install",e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS).catch(()=>{}))));
+self.addEventListener("fetch",e=>{
+  if(e.request.url.includes("supabase.co")||e.request.url.includes("onesignal"))return;
+  e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request).catch(()=>caches.match("/client.html"))));
+});`;
+    const blob=new Blob([sw],{type:"application/javascript"});
+    navigator.serviceWorker.register(URL.createObjectURL(blob)).catch(()=>{});
+  });
+}
+</script>
+</body>
+</html>
